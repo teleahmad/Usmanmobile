@@ -460,7 +460,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       }
     }
 
-    applyModeGoals('map', true);
+    applyModeGoals(currentMode, currentMode === 'map');
 
     const onControlsStart = () => {
       // Cancel scripted transition immediately when user manually orbits/pans/zooms
@@ -894,7 +894,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         camera.position.z - sz,
       );
 
-      // 2. 3D SHOP EXTERIOR MODE: smooth dolly zoom + automatic walk-inside (never crosses through back/side walls)
+      // 2. 3D SHOP EXTERIOR MODE: smooth dolly zoom + automatic walk-inside (and seamless zoom-out back to 3D village map on PC!)
       if (currentMode === 'shop') {
         _offset.copy(camera.position).sub(controls.target);
         const curDist = _offset.length();
@@ -906,6 +906,34 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         }
         if (clampedDelta < 0 && curDist < 7.8) {
           setShutterOpenedState(true);
+        }
+
+        const isDesktop = window.innerWidth >= 768;
+        if (clampedDelta > 0 && isDesktop && curDist * zoomFactor >= 15.5) {
+          // Seamlessly unlock into 3D Village Map mode while keeping the 3D perspective tilt
+          currentMode = 'map';
+          setShutterOpenedState(false);
+          hoveringShutter = false;
+          pointerMovedInShop = false;
+          configureExteriorControls('map');
+          stateRef.current.onModeChange('map');
+
+          controls.target.y = 0;
+          _offset.copy(camera.position).sub(controls.target);
+          _spherical.setFromVector3(_offset);
+          _spherical.radius = THREE.MathUtils.clamp(
+            Math.max(curDist * zoomFactor, 20),
+            controls.minDistance,
+            controls.maxDistance,
+          );
+          _spherical.phi = THREE.MathUtils.clamp(_spherical.phi, 0.55, Math.PI * 0.42);
+          _offset.setFromSpherical(_spherical);
+          camera.position.copy(controls.target).add(_offset);
+          camera.lookAt(controls.target);
+          controls.update();
+          needsRender = true;
+          requestRender();
+          return;
         }
 
         const nextDist = THREE.MathUtils.clamp(

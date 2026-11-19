@@ -21,6 +21,8 @@ import {
 import { ResilientImage } from './ResilientImage';
 
 interface HomePageProps {
+  products?: CatalogProduct[];
+  siteImages?: Record<keyof typeof SITE_IMAGES, string>;
   onNavigate: (page: SitePage, sectionHash?: string) => void;
   onBrowseCategory: (category: ProductCategory) => void;
   onOpenVirtualShop: (initialMode: ViewMode) => void;
@@ -29,6 +31,8 @@ interface HomePageProps {
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
+  products = CATALOG_PRODUCTS,
+  siteImages = SITE_IMAGES,
   onNavigate,
   onBrowseCategory,
   onOpenVirtualShop,
@@ -41,6 +45,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [arrivalOffset, setArrivalOffset] = useState(4);
   const [showReviews, setShowReviews] = useState(false);
 
+  const catalogList = products.length > 0 ? products : CATALOG_PRODUCTS;
+
   const handleQuickAdd = (e: React.MouseEvent, product: CatalogProduct) => {
     e.stopPropagation();
     onQuickAddToCart(product);
@@ -52,8 +58,9 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const getSlice = (offset: number, count: number): CatalogProduct[] => {
     const result: CatalogProduct[] = [];
-    for (let i = 0; i < count; i++) {
-      result.push(CATALOG_PRODUCTS[(offset + i) % CATALOG_PRODUCTS.length]);
+    const safeCount = Math.min(count, catalogList.length);
+    for (let i = 0; i < safeCount; i++) {
+      result.push(catalogList[(offset + i) % catalogList.length]);
     }
     return result;
   };
@@ -202,12 +209,13 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="relative flex items-end justify-center lg:col-span-6 lg:justify-end">
               <div className="relative w-full max-w-[520px] overflow-hidden rounded-t-3xl bg-[#ECD8BE]">
                 <ResilientImage
-                  src={SITE_IMAGES.heroLifestyle}
+                  src={siteImages.heroLifestyle}
                   alt="Customer enjoying wireless audio headphones and smartphone from Usman Mobile"
                   className="aspect-[4/3] w-full object-cover object-top"
                 />
-                {/* Soft left/bottom blend into sand canvas */}
-                <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#F3ECE6] to-transparent" />
+                {/* Soft left feathered blur + blend into sand canvas */}
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-12 backdrop-blur-[2px] [-webkit-mask-image:linear-gradient(to_right,black_0%,transparent_100%)] [mask-image:linear-gradient(to_right,black_0%,transparent_100%)]" />
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#F3ECE6] via-[#F3ECE6]/55 to-transparent" />
               </div>
 
               {/* Compact Floating Social Proof Card */}
@@ -242,7 +250,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               type="button"
               onClick={() =>
                 setTrendingOffset(
-                  (prev) => (prev - 1 + CATALOG_PRODUCTS.length) % CATALOG_PRODUCTS.length,
+                  (prev) => (prev - 1 + catalogList.length) % catalogList.length,
                 )
               }
               aria-label="Previous trending products"
@@ -253,7 +261,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <button
               type="button"
               onClick={() =>
-                setTrendingOffset((prev) => (prev + 1) % CATALOG_PRODUCTS.length)
+                setTrendingOffset((prev) => (prev + 1) % catalogList.length)
               }
               aria-label="Next trending products"
               className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
@@ -483,12 +491,15 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             </div>
             <div className="md:col-span-6">
-              <div className="aspect-[16/10] w-full overflow-hidden rounded-xl bg-neutral-100">
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-white">
                 <ResilientImage
-                  src={SITE_IMAGES.realInteriorCounter}
+                  src={siteImages.realInteriorCounter}
                   alt="Real interior view of Usman Mobile Repairing Centre counter and accessories wall"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full scale-[1.02] object-cover"
                 />
+                {/* Seamless 4-side feathered blur & smooth white dissolve (no corner seams) */}
+                <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
+                <div className="pointer-events-none absolute -inset-px rounded-xl shadow-[inset_0_0_26px_16px_#ffffff]" />
               </div>
             </div>
           </div>
@@ -506,7 +517,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               type="button"
               onClick={() =>
                 setFeaturedOffset(
-                  (prev) => (prev - 1 + CATALOG_PRODUCTS.length) % CATALOG_PRODUCTS.length,
+                  (prev) => (prev - 1 + catalogList.length) % catalogList.length,
                 )
               }
               aria-label="Previous featured products"
@@ -517,7 +528,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <button
               type="button"
               onClick={() =>
-                setFeaturedOffset((prev) => (prev + 1) % CATALOG_PRODUCTS.length)
+                setFeaturedOffset((prev) => (prev + 1) % catalogList.length)
               }
               aria-label="Next featured products"
               className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
@@ -543,7 +554,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               type="button"
               onClick={() =>
                 setArrivalOffset(
-                  (prev) => (prev - 1 + CATALOG_PRODUCTS.length) % CATALOG_PRODUCTS.length,
+                  (prev) => (prev - 1 + catalogList.length) % catalogList.length,
                 )
               }
               aria-label="Previous new arrivals"
@@ -554,7 +565,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             <button
               type="button"
               onClick={() =>
-                setArrivalOffset((prev) => (prev + 1) % CATALOG_PRODUCTS.length)
+                setArrivalOffset((prev) => (prev + 1) % catalogList.length)
               }
               aria-label="Next new arrivals"
               className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"

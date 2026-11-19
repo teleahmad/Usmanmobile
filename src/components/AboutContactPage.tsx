@@ -19,10 +19,14 @@ import {
 import { ResilientImage } from './ResilientImage';
 
 interface AboutContactPageProps {
+  siteImages?: Record<keyof typeof SITE_IMAGES, string>;
+  shopGallery?: ShopGalleryPhoto[];
   onOpenVirtualShop: (mode: ViewMode) => void;
 }
 
 export const AboutContactPage: React.FC<AboutContactPageProps> = ({
+  siteImages = SITE_IMAGES,
+  shopGallery = SHOP_GALLERY,
   onOpenVirtualShop,
 }) => {
   const [lightboxPhoto, setLightboxPhoto] = useState<ShopGalleryPhoto | null>(null);
@@ -52,12 +56,15 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
             </div>
 
             <div className="lg:col-span-6">
-              <div className="aspect-[16/10] w-full overflow-hidden rounded-2xl border border-black/5 bg-neutral-100 shadow-xs">
+              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-white">
                 <ResilientImage
-                  src={SITE_IMAGES.signboard}
+                  src={siteImages.signboard}
                   alt="Usman Mobile Repairing Centre Main Bazar signboard"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full scale-[1.02] object-cover"
                 />
+                {/* Seamless 4-side feathered blur & smooth white dissolve */}
+                <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
+                <div className="pointer-events-none absolute -inset-px rounded-2xl shadow-[inset_0_0_26px_16px_#ffffff]" />
               </div>
             </div>
           </div>
@@ -74,18 +81,21 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
         </div>
 
         <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {SHOP_GALLERY.map((photo) => (
+          {shopGallery.map((photo) => (
             <figure
               key={photo.id}
               onClick={() => setLightboxPhoto(photo)}
               className="group cursor-pointer overflow-hidden rounded-2xl border border-black/5 bg-white p-3 shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#EA4E1B]"
             >
-              <div className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-neutral-100">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-white">
                 <ResilientImage
                   src={photo.src}
                   alt={photo.title}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                  className="h-full w-full scale-[1.02] object-cover transition-transform duration-300 group-hover:scale-[1.06]"
                 />
+                {/* Seamless 4-side feathered blur & smooth white dissolve (zero corner artifacts) */}
+                <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
+                <div className="pointer-events-none absolute -inset-px rounded-xl shadow-[inset_0_0_24px_14px_#ffffff]" />
               </div>
               <figcaption className="px-1 pt-3 pb-1">
                 <div className="text-sm font-bold text-[#141414]">{photo.title}</div>

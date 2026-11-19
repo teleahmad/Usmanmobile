@@ -5,19 +5,43 @@
       "description": "Store mobile accessory or device for sale",
       "type": "object",
       "properties": {
+        "sku": { "type": "string", "maxLength": 40 },
+        "shopItemKey": { "type": "string", "maxLength": 60 },
         "name": { "type": "string", "maxLength": 100 },
         "category": { "type": "string", "maxLength": 50 },
         "pricePkr": { "type": "number" },
         "originalPricePkr": { "type": "number" },
-        "rating": { "type": "number" },
+        "discountPercent": { "type": "number" },
+        "rating": { "type": "string", "maxLength": 10 },
+        "reviewsCount": { "type": "number" },
+        "soldCount": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "maxLength": 40 },
         "inStock": { "type": "boolean" },
-        "specs": { "type": "string", "maxLength": 200 },
+        "hidden": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "featured": { "type": "boolean" },
+        "specs": { "type": "string", "maxLength": 240 },
         "description": { "type": "string", "maxLength": 1000 },
-        "image": { "type": "string", "maxLength": 500 },
+        "warrantyNote": { "type": "string", "maxLength": 120 },
+        "image": { "type": "string", "maxLength": 350000 },
+        "variants": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "category", "pricePkr", "inStock"]
+    },
+    "SiteMedia": {
+      "title": "SiteMedia",
+      "description": "Customizable shop interior, exterior, signboard, and hero images",
+      "type": "object",
+      "properties": {
+        "slotKey": { "type": "string", "maxLength": 60 },
+        "title": { "type": "string", "maxLength": 120 },
+        "caption": { "type": "string", "maxLength": 300 },
+        "imageUrl": { "type": "string", "maxLength": 350000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slotKey", "imageUrl"]
     },
     "RepairTicket": {
       "title": "RepairTicket",
@@ -77,7 +101,11 @@
   "firestore": {
     "/products/{productId}": {
       "schema": "Product",
-      "description": "Retail catalog products list"
+      "description": "Retail catalog products list with admin overrides and additions"
+    },
+    "/siteMedia/{slotId}": {
+      "schema": "SiteMedia",
+      "description": "Shop interior, storefront, signboard, and gallery photos managed by admin"
     },
     "/repairs/{repairId}": {
       "schema": "RepairTicket",

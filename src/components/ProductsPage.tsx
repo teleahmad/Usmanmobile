@@ -11,6 +11,7 @@ import {
 import { ResilientImage } from './ResilientImage';
 
 interface ProductsPageProps {
+  products?: CatalogProduct[];
   initialCategory?: ProductCategory;
   onInspectProduct: (product: CatalogProduct) => void;
   onQuickAddToCart: (product: CatalogProduct) => void;
@@ -20,6 +21,7 @@ interface ProductsPageProps {
 type SortOrder = 'featured' | 'price-asc' | 'price-desc';
 
 export const ProductsPage: React.FC<ProductsPageProps> = ({
+  products = CATALOG_PRODUCTS,
   initialCategory = 'All',
   onInspectProduct,
   onQuickAddToCart,
@@ -35,9 +37,19 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
     setSelectedCategory(initialCategory);
   }, [initialCategory]);
 
+  const availableCategories = useMemo<ProductCategory[]>(() => {
+    const set = new Set<string>(PRODUCT_CATEGORIES);
+    products.forEach((p) => {
+      if (p.category?.trim()) {
+        set.add(p.category.trim());
+      }
+    });
+    return Array.from(set);
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const list = CATALOG_PRODUCTS.filter((item) => {
+    const list = products.filter((item) => {
       const matchesCategory =
         selectedCategory === 'All' || item.category === selectedCategory;
       const matchesQuery =
@@ -56,7 +68,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       return [...list].sort((a, b) => b.pricePkr - a.pricePkr);
     }
     return list;
-  }, [searchQuery, selectedCategory, sortOrder]);
+  }, [products, searchQuery, selectedCategory, sortOrder]);
 
   const handleQuickAdd = (e: React.MouseEvent, product: CatalogProduct) => {
     e.stopPropagation();
@@ -144,7 +156,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               aria-label="Product categories"
               className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0 lg:order-1"
             >
-              {PRODUCT_CATEGORIES.map((category) => {
+              {availableCategories.map((category) => {
                 const active = selectedCategory === category;
                 return (
                   <button
@@ -172,7 +184,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
       <section className="mx-auto max-w-[1200px] px-2.5 py-4 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
         <div className="mb-3 sm:mb-5 flex items-center justify-between text-[11px] sm:text-xs text-neutral-600 px-0.5">
           <span className="tabular-nums">
-            Showing {filteredProducts.length} of {CATALOG_PRODUCTS.length} items · Tap any item for details
+            Showing {filteredProducts.length} of {products.length} items · Tap any item for details
           </span>
           {(selectedCategory !== 'All' || searchQuery) && (
             <button

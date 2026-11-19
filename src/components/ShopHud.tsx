@@ -60,6 +60,7 @@ interface ShopHudProps {
   onToggleDock: () => void;
   onItemWhatsApp: (topic: string) => void;
   onAddCatalogProduct?: (product: CatalogProduct) => void;
+  onExitToContact?: () => void;
 }
 
 const PIN_DWELL_MS = 2000;
@@ -91,6 +92,7 @@ export const ShopHud: React.FC<ShopHudProps> = ({
   onToggleDock,
   onItemWhatsApp,
   onAddCatalogProduct,
+  onExitToContact,
 }) => {
   const [pinHoverProgress, setPinHoverProgress] = useState(0);
   const [addedSpotlightId, setAddedSpotlightId] = useState<string | null>(null);
@@ -167,7 +169,38 @@ export const ShopHud: React.FC<ShopHudProps> = ({
         </div>
       )}
 
-      {/* Map side legend removed per user request */}
+      {/* Village Name Badge on Top-Left of Map View */}
+      {viewMode === 'map' && (
+        <div className="pointer-events-none absolute top-3 left-3 z-20 flex items-center gap-2 rounded-2xl border border-white/15 bg-[#0D162A]/88 px-3 py-2 text-white shadow-lg backdrop-blur-md">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-[#FFC531]/15 text-[#FFC531]">
+            <MapPin className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="leading-tight">
+            <div className="text-xs font-extrabold tracking-tight text-white">
+              Hussain Khan Wala
+            </div>
+            <div className="text-[10px] font-medium text-slate-300">
+              Chak No. 8 · Pattoki
+            </div>
+            <div dir="rtl" className="font-urdu text-[11px] font-semibold text-[#FFC531]">
+              حسین خان والا (چک نمبر 8)
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Compact Exit Button -> Returns to Contact Us */}
+      {onExitToContact && !selectedProduct && (
+        <button
+          type="button"
+          onClick={onExitToContact}
+          aria-label="Exit 3D Shop to Contact Us"
+          className="pointer-events-auto md:hidden absolute top-3 right-3 z-30 inline-flex items-center gap-1 rounded-full border border-white/25 bg-[#0D162A]/90 px-3 py-1.5 text-[11px] font-bold text-white shadow-lg backdrop-blur-md transition hover:bg-[#EA4E1B] active:scale-95"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Exit</span>
+        </button>
+      )}
 
       {/* Edit Pin Calibration Helper Banner */}
       {viewMode === 'map' && editPinMode && (

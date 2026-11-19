@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
+  Camera,
   CheckCircle2,
   Clock,
   Eye,
@@ -13,6 +14,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  ShoppingBag,
   Smartphone,
   Trash2,
   User,
@@ -34,6 +36,11 @@ import {
 import { getWhatsAppUrl, SHOP_CONFIG } from '../config/shopConfig';
 import { CATALOG_PRODUCTS, formatPkr, SitePage } from '../data/catalogData';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../firebase';
+import { LiveCatalogProduct, SiteMediaOverride } from '../hooks/useLiveStoreData';
+import {
+  AdminProductsManager,
+  AdminShopPhotosManager,
+} from './AdminProductPhotosControls';
 
 export interface RepairTicketData {
   id: string;
@@ -62,15 +69,21 @@ export interface OrderData {
 }
 
 interface AdminDashboardProps {
+  products: LiveCatalogProduct[];
+  mediaOverrides: Record<string, SiteMediaOverride>;
   onNavigate: (page: SitePage) => void;
 }
 
-const AUTHORIZED_ADMIN_EMAIL = 'teleahmad768@gmail.com';
+const AUTHORIZED_ADMIN_EMAILS = ['teleahmad768@gmail.com', 'hkwpro@gmail.com'];
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  products,
+  mediaOverrides,
+  onNavigate,
+}) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'repairs' | 'orders' | 'inventory'>('repairs');
+  const [activeTab, setActiveTab] = useState<'repairs' | 'orders' | 'products' | 'photos'>('products');
   const [repairs, setRepairs] = useState<RepairTicketData[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -114,9 +127,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     setOrders([]);
   };
 
-  // Real-time Firestore subscriptions when signed in
+  const isAuthorizedAdmin = Boolean(
+    user?.email && AUTHORIZED_ADMIN_EMAILS.includes(user.email.toLowerCase()),
+  );
+
+  // Real-time Firestore subscriptions when signed in as an authorized admin
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isAuthorizedAdmin) return;
 
     setLoadingData(true);
 
@@ -158,7 +175,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       unsubRepairs();
       unsubOrders();
     };
-  }, [user]);
+  }, [user, isAuthorizedAdmin]);
 
   // Create New Repair Ticket
   const handleCreateRepair = async (e: React.FormEvent) => {
@@ -319,9 +336,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   <div className="font-bold text-[#141414] truncate max-w-[160px]">
                     {user.email || user.displayName || 'Admin'}
                   </div>
-                  <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 justify-end">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Authorized Admin
+                  <div
+                    className={`text-[10px] font-semibold flex items-center gap-1 justify-end ${
+                      isAuthorizedAdmin ? 'text-emerald-600' : 'text-red-600'
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        isAuthorizedAdmin ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                      }`}
+                    />
+                    {isAuthorizedAdmin ? 'Authorized Admin' : 'Unauthorized Account'}
                   </div>
                 </div>
                 <button
@@ -376,9 +401,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               Admin Sign In Required
             </h2>
             <p className="mt-2 text-xs leading-relaxed text-neutral-600">
-              Please sign in with your authorized store Google account (
-              <strong className="text-neutral-900">{AUTHORIZED_ADMIN_EMAIL}</strong>) to manage
-              repair tickets, view customer orders, and update inventory.
+              Please sign in with any of the authorized emails ending with{' '}
+              <strong className="text-neutral-900">pro@gmail.com</strong> or{' '}
+              <strong className="text-neutral-900">768@gmail.com</strong> to manage repair
+              tickets, view customer orders, and update products &amp; shop photos.
             </p>
 
             <button
@@ -393,6 +419,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             <div className="mt-4 text-[11px] text-neutral-400">
               Direct access for Usman Mobile staff · Hussain Khan Wala
             </div>
+          </div>
+        ) : !isAuthorizedAdmin ? (
+          /* Signed in with a non-admin email */
+          <div className="mt-12 mx-auto max-w-md rounded-3xl bg-white p-8 text-center shadow-lg border border-red-200">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-600 mb-4">
+              <AlertCircle className="h-8 w-8" />
+            </div>
+            <h2 className="font-display text-xl font-extrabold text-[#141414]">
+              Unauthorized Account
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-neutral-600">
+              Signed in as <strong className="text-neutral-900">{user.email}</strong>. Please sign
+              in with any of the authorized emails ending with{' '}
+              <strong className="text-neutral-900">pro@gmail.com</strong> or{' '}
+              <strong className="text-neutral-900">768@gmail.com</strong>.
+            </p>
+
+            <button
+              type="button"
+              onClick={async () => {
+                await handleSignOut();
+                await handleGoogleSignIn();
+              }}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#EA4E1B] py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#d44212]"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Switch Google Account</span>
+            </button>
           </div>
         ) : (
           /* Main Dashboard Content */
@@ -426,14 +480,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               <div className="rounded-2xl bg-white p-4 shadow-sm border border-black/5">
                 <div className="text-xs font-semibold text-neutral-500">Catalog Items</div>
                 <div className="mt-1 text-2xl font-extrabold text-[#141414]">
-                  {CATALOG_PRODUCTS.length}
+                  {products.filter((p) => !p.hidden).length}
                 </div>
-                <div className="text-[10px] text-neutral-400 mt-0.5">Stocked accessories</div>
+                <div className="text-[10px] text-neutral-400 mt-0.5">Live products</div>
               </div>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex border-b border-black/10 gap-4">
+            <div className="flex flex-wrap border-b border-black/10 gap-x-5 gap-y-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('products')}
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition border-b-2 ${
+                  activeTab === 'products'
+                    ? 'border-[#EA4E1B] text-[#EA4E1B]'
+                    : 'border-transparent text-neutral-500 hover:text-[#141414]'
+                }`}
+              >
+                <ShoppingBag className="h-4 w-4" />
+                <span>Products ({products.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('photos')}
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition border-b-2 ${
+                  activeTab === 'photos'
+                    ? 'border-[#EA4E1B] text-[#EA4E1B]'
+                    : 'border-transparent text-neutral-500 hover:text-[#141414]'
+                }`}
+              >
+                <Camera className="h-4 w-4" />
+                <span>Shop Photos</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setActiveTab('repairs')}
@@ -444,7 +524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 }`}
               >
                 <Wrench className="h-4 w-4" />
-                <span>Mobile Repair Tickets ({repairs.length})</span>
+                <span>Repairs ({repairs.length})</span>
               </button>
 
               <button
@@ -457,7 +537,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 }`}
               >
                 <Package className="h-4 w-4" />
-                <span>Customer Orders ({orders.length})</span>
+                <span>Orders ({orders.length})</span>
               </button>
             </div>
 
@@ -747,6 +827,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </div>
                 )}
               </div>
+            )}
+            {/* TAB 3: LIVE PRODUCTS MANAGER */}
+            {activeTab === 'products' && (
+              <AdminProductsManager
+                products={products}
+                setFeedbackMsg={setFeedbackMsg}
+              />
+            )}
+
+            {/* TAB 4: SHOP INTERIOR & EXTERIOR PHOTOS MANAGER */}
+            {activeTab === 'photos' && (
+              <AdminShopPhotosManager
+                mediaOverrides={mediaOverrides}
+                setFeedbackMsg={setFeedbackMsg}
+              />
             )}
           </div>
         )}

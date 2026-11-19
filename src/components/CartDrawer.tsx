@@ -25,6 +25,7 @@ import { ResilientImage } from './ResilientImage';
 interface CartDrawerProps {
   open: boolean;
   items: CartItem[];
+  products?: (typeof CATALOG_PRODUCTS)[number][];
   onClose: () => void;
   onUpdateQty: (productId: string, variant: string, nextQty: number) => void;
   onRemoveItem: (productId: string, variant: string) => void;
@@ -35,6 +36,7 @@ interface CartDrawerProps {
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   open,
   items,
+  products = CATALOG_PRODUCTS,
   onClose,
   onUpdateQty,
   onRemoveItem,
@@ -49,13 +51,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const enrichedItems = useMemo(() => {
     return items
       .map((item) => {
-        const product = CATALOG_PRODUCTS.find((p) => p.id === item.productId);
+        const product = products.find((p) => p.id === item.productId);
         return product ? { ...item, product } : null;
       })
       .filter((entry): entry is CartItem & { product: (typeof CATALOG_PRODUCTS)[number] } =>
         Boolean(entry),
       );
-  }, [items]);
+  }, [items, products]);
 
   const subtotal = useMemo(
     () =>
@@ -72,7 +74,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     e.preventDefault();
     if (enrichedItems.length === 0) return;
 
-    const url = buildCartWhatsAppUrl(items, customerName, fulfillment, note);
+    const url = buildCartWhatsAppUrl(items, customerName, fulfillment, note, products);
     const link = document.createElement('a');
     link.href = url;
     link.target = '_blank';

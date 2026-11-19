@@ -16,7 +16,7 @@ import { SHOP_CONFIG, SHOP_IMAGES } from '../config/shopConfig';
 
 export type SitePage = 'home' | 'products' | 'repairs' | 'virtual-shop' | 'about' | 'admin';
 
-export type ProductCategory =
+export type DefaultProductCategory =
   | 'All'
   | 'Charging'
   | 'Audio'
@@ -24,12 +24,14 @@ export type ProductCategory =
   | 'Power & Parts'
   | 'Phones & Wearables';
 
+export type ProductCategory = DefaultProductCategory | (string & {});
+
 export interface CatalogProduct {
   id: string;
   sku: string;
   shopItemKey: string;
   name: string;
-  category: Exclude<ProductCategory, 'All'>;
+  category: string;
   pricePkr: number;
   originalPricePkr?: number;
   discountPercent?: number;
@@ -511,6 +513,7 @@ export function buildCartWhatsAppUrl(
   customerName: string,
   fulfillment: 'pickup' | 'delivery',
   note: string,
+  catalogList: CatalogProduct[] = CATALOG_PRODUCTS,
 ): string {
   const lines: string[] = [
     'Assalam o Alaikum Usman Mobile Repairing Centre,',
@@ -520,7 +523,7 @@ export function buildCartWhatsAppUrl(
 
   let subtotal = 0;
   cartItems.forEach((item, idx) => {
-    const product = CATALOG_PRODUCTS.find((p) => p.id === item.productId);
+    const product = catalogList.find((p) => p.id === item.productId);
     if (!product) return;
     const lineTotal = product.pricePkr * item.quantity;
     subtotal += lineTotal;

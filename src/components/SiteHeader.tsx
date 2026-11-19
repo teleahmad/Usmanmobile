@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, Shield, ShoppingBag, X } from 'lucide-react';
+import { Menu, ShoppingBag, X } from 'lucide-react';
 import { SitePage } from '../data/catalogData';
 
 interface SiteHeaderProps {
@@ -78,22 +78,8 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Admin Portal + Cart + Mobile Menu Trigger */}
+        {/* Zone 3: Cart + Mobile Menu Trigger */}
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleNavClick('admin')}
-            title="Admin Dashboard (ایڈمن لاگ ان)"
-            className={`inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 ${
-              activePage === 'admin'
-                ? 'bg-[#141414] text-white shadow-sm'
-                : 'border border-black/10 bg-white/80 text-neutral-700 hover:bg-white hover:text-[#EA4E1B]'
-            }`}
-          >
-            <Shield className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Admin</span>
-          </button>
-
           <button
             type="button"
             onClick={onOpenCart}

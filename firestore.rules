@@ -15,10 +15,6 @@ service cloud.firestore {
       return request.resource.data;
     }
 
-    function existing() {
-      return resource.data;
-    }
-
     function isSignedIn() {
       return request.auth != null;
     }
@@ -26,14 +22,45 @@ service cloud.firestore {
     function isBootstrappedAdmin() {
       return isSignedIn() &&
         (request.auth.token.email == 'teleahmad768@gmail.com' ||
+         request.auth.token.email == 'hkwpro@gmail.com' ||
          exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     function isValidProduct(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.category is string && data.category.size() <= 50 &&
+      return data.keys().hasAll(['name', 'category', 'pricePkr', 'inStock']) &&
+             data.keys().hasOnly([
+               'sku', 'shopItemKey', 'name', 'category', 'pricePkr', 'originalPricePkr',
+               'discountPercent', 'rating', 'reviewsCount', 'soldCount', 'status',
+               'inStock', 'hidden', 'deleted', 'featured', 'specs', 'description', 'warrantyNote',
+               'image', 'variants', 'createdAt', 'updatedAt'
+             ]) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
              data.pricePkr is number && data.pricePkr >= 0 &&
-             data.inStock is bool;
+             data.inStock is bool &&
+             (!('originalPricePkr' in data) || (data.originalPricePkr is number && data.originalPricePkr >= 0)) &&
+             (!('discountPercent' in data) || (data.discountPercent is number && data.discountPercent >= 0 && data.discountPercent <= 99)) &&
+             (!('rating' in data) || (data.rating is string && data.rating.size() <= 10)) &&
+             (!('reviewsCount' in data) || (data.reviewsCount is number && data.reviewsCount >= 0)) &&
+             (!('soldCount' in data) || (data.soldCount is string && data.soldCount.size() <= 30)) &&
+             (!('status' in data) || (data.status is string && data.status.size() <= 40)) &&
+             (!('hidden' in data) || data.hidden is bool) &&
+             (!('deleted' in data) || data.deleted is bool) &&
+             (!('featured' in data) || data.featured is bool) &&
+             (!('specs' in data) || (data.specs is string && data.specs.size() <= 240)) &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('warrantyNote' in data) || (data.warrantyNote is string && data.warrantyNote.size() <= 120)) &&
+             (!('image' in data) || (data.image is string && data.image.size() <= 350000)) &&
+             (!('variants' in data) || (data.variants is list && data.variants.size() <= 10));
+    }
+
+    function isValidSiteMedia(data) {
+      return data.keys().hasAll(['slotKey', 'imageUrl']) &&
+             data.keys().hasOnly(['slotKey', 'title', 'caption', 'imageUrl', 'updatedAt']) &&
+             data.slotKey is string && data.slotKey.size() > 0 && data.slotKey.size() <= 60 &&
+             data.imageUrl is string && data.imageUrl.size() > 0 && data.imageUrl.size() <= 350000 &&
+             (!('title' in data) || (data.title is string && data.title.size() <= 120)) &&
+             (!('caption' in data) || (data.caption is string && data.caption.size() <= 300));
     }
 
     function isValidRepair(data) {
@@ -61,7 +88,15 @@ service cloud.firestore {
       allow delete: if isValidId(productId) && isBootstrappedAdmin();
     }
 
-    // 2. Repair Tickets (Public read for tracking repair by token, admin-only manage)
+    // 2. Shop Photos & Site Media (Public read for visitors, admin-only write)
+    match /siteMedia/{slotId} {
+      allow read: if true;
+      allow create: if isValidId(slotId) && isBootstrappedAdmin() && isValidSiteMedia(incoming());
+      allow update: if isValidId(slotId) && isBootstrappedAdmin() && isValidSiteMedia(incoming());
+      allow delete: if isValidId(slotId) && isBootstrappedAdmin();
+    }
+
+    // 3. Repair Tickets (Public read for tracking repair by token, admin-only manage)
     match /repairs/{repairId} {
       allow read: if true;
       allow create: if isValidId(repairId) && isBootstrappedAdmin() && isValidRepair(incoming());
@@ -69,7 +104,7 @@ service cloud.firestore {
       allow delete: if isValidId(repairId) && isBootstrappedAdmin();
     }
 
-    // 3. Customer Orders (Public creation on checkout, admin-only manage)
+    // 4. Customer Orders (Public creation on checkout, admin-only manage)
     match /orders/{orderId} {
       allow create: if isValidId(orderId) && isValidOrder(incoming());
       allow read: if isBootstrappedAdmin();
@@ -77,7 +112,7 @@ service cloud.firestore {
       allow delete: if isValidId(orderId) && isBootstrappedAdmin();
     }
 
-    // 4. Admin Whitelist
+    // 5. Admin Whitelist
     match /admins/{adminId} {
       allow read: if isBootstrappedAdmin() && isValidId(adminId);
       allow write: if isBootstrappedAdmin() && isValidId(adminId);

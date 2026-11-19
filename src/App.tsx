@@ -5,6 +5,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { CartDrawer } from './components/CartDrawer';
 import { HomePage } from './components/HomePage';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { ProductsPage } from './components/ProductsPage';
 import { RepairsPage } from './components/RepairsPage';
@@ -27,8 +28,13 @@ import {
   ProductCategory,
   SitePage,
 } from './data/catalogData';
+import { useLiveStoreData } from './hooks/useLiveStoreData';
 
 const CART_STORAGE_KEY = 'usman_mobile_cart_v1';
+
+function isMobileViewport(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+}
 
 function loadSavedCart(): CartItem[] {
   try {
@@ -60,8 +66,18 @@ export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [inspectedProduct, setInspectedProduct] = useState<CatalogProduct | null>(null);
 
-  // 3D Virtual Shop & Map state (preserved intact)
-  const [viewMode, setViewMode] = useState<ViewMode>('map');
+  const {
+    products: liveProducts,
+    allProducts: allAdminProducts,
+    siteImages: liveSiteImages,
+    shopGallery: liveShopGallery,
+    mediaOverrides,
+  } = useLiveStoreData();
+
+  // 3D Virtual Shop & Map state (mobile defaults to 3D shop, desktop defaults to full village map)
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    isMobileViewport() ? 'shop' : 'map',
+  );
   const [panoTab, setPanoTab] = useState<PanoTab>('interior');
   const [roadDetailsVisible, setRoadDetailsVisible] = useState(true);
   const [editPinMode, setEditPinMode] = useState(false);
@@ -193,6 +209,14 @@ export default function App() {
     if (page === 'products') {
       setInitialProductCategory('All');
     }
+    if (page === 'virtual-shop') {
+      setEditPinMode(false);
+      setSelectedItemType(null);
+      if (insideShop) {
+        exitShopRef.current?.();
+      }
+      setViewMode(isMobileViewport() ? 'shop' : 'map');
+    }
     setActivePage(page);
     if (sectionHash) {
       window.setTimeout(() => {
@@ -201,6 +225,12 @@ export default function App() {
     } else {
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     }
+  }, [insideShop]);
+
+  const handleToggleAdmin = useCallback(() => {
+    setCartOpen(false);
+    setActivePage((prev) => (prev === 'admin' ? 'home' : 'admin'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const handleBrowseCategory = useCallback((category: ProductCategory) => {
@@ -214,17 +244,14 @@ export default function App() {
     setCartOpen(false);
     setEditPinMode(false);
     setSelectedItemType(null);
-    setViewMode(initialMode);
-    if (initialMode === 'pano') {
+    const resolvedMode: ViewMode =
+      initialMode === 'shop' ? (isMobileViewport() ? 'shop' : 'map') : initialMode;
+    setViewMode(resolvedMode);
+    if (resolvedMode === 'pano') {
       setPanoTab('interior');
     }
     setActivePage('virtual-shop');
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-    if (initialMode === 'shop') {
-      window.setTimeout(() => {
-        enterShopRef.current?.();
-      }, 70);
-    }
   }, []);
 
   const handleAddToCart = useCallback(
@@ -332,7 +359,7 @@ export default function App() {
     Math.abs(shopUv[1] - SHOP_CONFIG.DEFAULT_SHOP_UV[1]) < 0.001;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-[#F3ECE6] text-[#141414] pb-16 md:pb-0">
+    <div className="flex min-h-[100dvh] flex-col bg-[#F3ECE6] text-[#141414] pb-24 md:pb-0">
       <SiteHeader
         activePage={activePage}
         cartCount={totalCartCount}
@@ -343,6 +370,8 @@ export default function App() {
       <main className="flex-1">
         {activePage === 'home' && (
           <HomePage
+            products={liveProducts}
+            siteImages={liveSiteImages}
             onNavigate={handleNavigate}
             onBrowseCategory={handleBrowseCategory}
             onOpenVirtualShop={handleOpenVirtualShop}
@@ -353,6 +382,7 @@ export default function App() {
 
         {activePage === 'products' && (
           <ProductsPage
+            products={liveProducts}
             initialCategory={initialProductCategory}
             onInspectProduct={handleInspectProduct}
             onQuickAddToCart={(product) => handleAddToCart(product)}
@@ -363,11 +393,19 @@ export default function App() {
         {activePage === 'repairs' && <RepairsPage />}
 
         {activePage === 'about' && (
-          <AboutContactPage onOpenVirtualShop={handleOpenVirtualShop} />
+          <AboutContactPage
+            siteImages={liveSiteImages}
+            shopGallery={liveShopGallery}
+            onOpenVirtualShop={handleOpenVirtualShop}
+          />
         )}
 
         {activePage === 'admin' && (
-          <AdminDashboard onNavigate={handleNavigate} />
+          <AdminDashboard
+            products={allAdminProducts}
+            mediaOverrides={mediaOverrides}
+            onNavigate={handleNavigate}
+          />
         )}
 
         {activePage === 'virtual-shop' && (
@@ -417,6 +455,7 @@ export default function App() {
               onToggleDock={() => setDockCollapsed((prev) => !prev)}
               onItemWhatsApp={handleOpenWhatsAppTopic}
               onAddCatalogProduct={(product) => handleAddToCart(product)}
+              onExitToContact={() => handleNavigate('about', 'contact')}
             />
 
             <ShopInfoDrawer
@@ -432,6 +471,7 @@ export default function App() {
         <SiteFooter
           onNavigate={handleNavigate}
           onBrowseCategory={handleBrowseCategory}
+          onToggleAdmin={handleToggleAdmin}
         />
       )}
 
@@ -443,9 +483,12 @@ export default function App() {
         onOpenCart={() => setCartOpen((prev) => !prev)}
       />
 
+      <OfflineIndicator />
+
       <CartDrawer
         open={cartOpen}
         items={cartItems}
+        products={liveProducts}
         onClose={() => setCartOpen(false)}
         onUpdateQty={handleUpdateCartQty}
         onRemoveItem={handleRemoveCartItem}
@@ -467,7 +510,7 @@ export default function App() {
           type="button"
           onClick={scrollToTop}
           aria-label="Back to top"
-          className="fixed bottom-20 right-4 md:bottom-8 md:right-8 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-[#d44212] hover:shadow-xl active:scale-95 animate-fadeIn"
+          className="fixed bottom-24 right-4 md:bottom-8 md:right-8 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-[#d44212] hover:shadow-xl active:scale-95 animate-fadeIn"
         >
           <ArrowUp className="h-5 w-5" aria-hidden="true" />
         </button>

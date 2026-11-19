@@ -1,18 +1,33 @@
-import React, { useState } from 'react';
-import { ExternalLink, MapPin, MessageCircle, Phone } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ExternalLink, MapPin, MessageCircle, Phone, Smartphone } from 'lucide-react';
 import { getWhatsAppUrl, SHOP_CONFIG } from '../config/shopConfig';
 import { ProductCategory, SitePage } from '../data/catalogData';
 
 interface SiteFooterProps {
   onNavigate: (page: SitePage, sectionHash?: string) => void;
   onBrowseCategory: (category: ProductCategory) => void;
+  onToggleAdmin: () => void;
 }
 
 export const SiteFooter: React.FC<SiteFooterProps> = ({
   onNavigate,
   onBrowseCategory,
+  onToggleAdmin,
 }) => {
   const [quickInquiry, setQuickInquiry] = useState('');
+  const copyrightClicksRef = useRef<number[]>([]);
+
+  const handleCopyrightClick = () => {
+    const now = Date.now();
+    const recent = copyrightClicksRef.current.filter((t) => now - t <= 2500);
+    recent.push(now);
+    if (recent.length >= 5) {
+      copyrightClicksRef.current = [];
+      onToggleAdmin();
+    } else {
+      copyrightClicksRef.current = recent;
+    }
+  };
 
   const handleQuickWhatsAppSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,15 +170,6 @@ export const SiteFooter: React.FC<SiteFooterProps> = ({
                   3D Virtual Shop
                 </button>
               </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('admin')}
-                  className="transition-colors font-semibold text-[#EA4E1B] hover:underline"
-                >
-                  Admin Dashboard (ایڈمن)
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -231,10 +237,22 @@ export const SiteFooter: React.FC<SiteFooterProps> = ({
         </div>
       </div>
 
-      {/* Warm Sand Bottom Copyright Bar */}
-      <div className="bg-[#F3ECE6] py-4 text-center text-xs text-neutral-600">
-        © {new Date().getFullYear()} {SHOP_CONFIG.NAME} · Hussain Khan Wala, Chak No. 8,
-        Pattoki
+      {/* Warm Sand Bottom Copyright Bar — Small mobile icon triggers Admin Login -> Dashboard on 5 rapid clicks */}
+      <div className="select-none bg-[#F3ECE6] px-4 py-4 text-center text-xs text-neutral-600">
+        <div className="mx-auto flex max-w-[1200px] items-center justify-center gap-2">
+          <span>
+            © {new Date().getFullYear()} {SHOP_CONFIG.NAME} · Hussain Khan Wala, Chak No. 8,
+            Pattoki
+          </span>
+          <button
+            type="button"
+            onClick={handleCopyrightClick}
+            aria-label="Mobile"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500/80 transition-colors hover:text-[#EA4E1B] active:scale-90"
+          >
+            <Smartphone className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </footer>
   );
