@@ -10,25 +10,30 @@ import {
   X,
 } from 'lucide-react';
 import { getWhatsAppUrl, SHOP_CONFIG, ViewMode } from '../config/shopConfig';
+import { useLanguage } from '../context/LanguageContext';
 import {
-  CUSTOMER_REVIEWS,
   SHOP_GALLERY,
   ShopGalleryPhoto,
   SITE_IMAGES,
 } from '../data/catalogData';
+import { LiveCustomerReview } from '../hooks/useLiveStoreData';
+import { CustomerReviewsSection } from './CustomerReviewsSection';
 import { ResilientImage } from './ResilientImage';
 
 interface AboutContactPageProps {
   siteImages?: Record<keyof typeof SITE_IMAGES, string>;
   shopGallery?: ShopGalleryPhoto[];
+  liveReviews?: LiveCustomerReview[];
   onOpenVirtualShop: (mode: ViewMode) => void;
 }
 
 export const AboutContactPage: React.FC<AboutContactPageProps> = ({
   siteImages = SITE_IMAGES,
   shopGallery = SHOP_GALLERY,
+  liveReviews = [],
   onOpenVirtualShop,
 }) => {
+  const { t, isUrdu } = useLanguage();
   const [lightboxPhoto, setLightboxPhoto] = useState<ShopGalleryPhoto | null>(null);
 
   return (
@@ -41,30 +46,40 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
               <p className="text-xs font-bold text-[#EA4E1B]">
                 Main Bazar · Hussain Khan Wala, Chak No. 8, Pattoki
               </p>
-              <h1 className="font-display mt-2 text-3xl font-extrabold tracking-tight text-[#141414] sm:text-4xl">
-                About <span className="text-[#EA4E1B]">Usman Mobile</span>
+              <h1
+                className={`font-display mt-2 text-3xl font-extrabold tracking-tight text-[#141414] sm:text-4xl ${
+                  isUrdu ? 'font-urdu' : ''
+                }`}
+              >
+                {t('About', 'تعارف')}{' '}
+                <span className="text-[#EA4E1B]">{t('Usman Mobile', 'عثمان موبائل')}</span>
               </h1>
               <p dir="rtl" className="font-urdu mt-2 text-lg font-semibold text-neutral-700">
                 {SHOP_CONFIG.URDU_NAME}
               </p>
-              <p className="mt-4 text-sm leading-relaxed text-neutral-600 sm:text-base">
-                Managed by <strong className="text-[#141414]">{SHOP_CONFIG.OWNER}</strong>
-                , Usman Mobile Repairing Centre is your neighborhood shop in Chak No. 8
-                for same-day smartphone repairs, tested mobile accessories, PTA keypad
-                and Android phones, and daily Easypaisa, JazzCash &amp; bill payments.
+              <p
+                className={`mt-4 text-sm leading-relaxed text-neutral-600 sm:text-base ${
+                  isUrdu ? 'font-urdu' : ''
+                }`}
+              >
+                {t(
+                  `Managed by ${SHOP_CONFIG.OWNER}, Usman Mobile Repairing Centre is your neighborhood shop in Chak No. 8 for same-day smartphone repairs, tested mobile accessories, used & PTA phones, and daily Easypaisa, JazzCash & bill payments.`,
+                  `${SHOP_CONFIG.OWNER} کی زیر نگرانی، عثمان موبائل اینڈ ریپئرنگ سینٹر چک نمبر 8 میں ایک ہی دن میں موبائل ریپئرنگ، معیاری ایسسریز، استعمال شدہ فونز، اور روزانہ ایزی پیسہ، جاز کیش اور بل ادائیگی کی خدمات فراہم کرتا ہے۔`,
+                )}
               </p>
             </div>
 
             <div className="lg:col-span-6">
-              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-white">
+              <div className="relative aspect-[8/3] w-full overflow-hidden rounded-2xl bg-white">
                 <ResilientImage
                   src={siteImages.signboard}
                   alt="Usman Mobile Repairing Centre Main Bazar signboard"
-                  className="h-full w-full scale-[1.02] object-cover"
+                  priority
+                  className="h-full w-full object-cover"
                 />
-                {/* Seamless 4-side feathered blur & smooth white dissolve */}
-                <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
-                <div className="pointer-events-none absolute -inset-px rounded-2xl shadow-[inset_0_0_26px_16px_#ffffff]" />
+                {/* Seamless 4-side feathered blur & smooth white dissolve without clipping signboard edges */}
+                <div className="pointer-events-none absolute inset-0 backdrop-blur-[2px] [-webkit-mask-image:radial-gradient(ellipse_82%_78%_at_center,transparent_66%,black_100%)] [mask-image:radial-gradient(ellipse_82%_78%_at_center,transparent_66%,black_100%)]" />
+                <div className="pointer-events-none absolute -inset-px rounded-2xl shadow-[inset_0_0_16px_10px_#ffffff]" />
               </div>
             </div>
           </div>
@@ -223,27 +238,10 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Client Reviews */}
-        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {CUSTOMER_REVIEWS.map((review) => (
-            <blockquote
-              key={review.id}
-              className="flex flex-col justify-between rounded-2xl border border-black/5 bg-white p-6 shadow-xs"
-            >
-              <p className="text-xs leading-relaxed text-neutral-600 sm:text-sm">
-                “{review.quote}”
-              </p>
-              <footer className="mt-4 border-t border-neutral-100 pt-3">
-                <div className="text-sm font-bold text-[#141414]">{review.name}</div>
-                <div className="text-[11px] text-neutral-500">
-                  {review.service} · {review.location}
-                </div>
-              </footer>
-            </blockquote>
-          ))}
-        </div>
       </section>
+
+      {/* Live Customer Reviews & Ratings */}
+      <CustomerReviewsSection liveReviews={liveReviews} />
 
       {/* Lightbox */}
       {lightboxPhoto && (

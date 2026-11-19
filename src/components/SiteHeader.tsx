@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Menu, ShoppingBag, X } from 'lucide-react';
+import { Globe, Menu, ShoppingBag, X } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import { SitePage } from '../data/catalogData';
 
 interface SiteHeaderProps {
@@ -9,12 +10,12 @@ interface SiteHeaderProps {
   onOpenCart: () => void;
 }
 
-const NAV_ITEMS: { id: SitePage; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'products', label: 'Products' },
-  { id: 'repairs', label: 'Repairs' },
-  { id: 'virtual-shop', label: '3D Shop' },
-  { id: 'about', label: 'Contact Us' },
+const NAV_ITEMS: { id: SitePage; en: string; ur: string }[] = [
+  { id: 'home', en: 'Home', ur: 'ہوم' },
+  { id: 'products', en: 'Products', ur: 'پراڈکٹس' },
+  { id: 'repairs', en: 'Repairs', ur: 'ریپئرنگ' },
+  { id: 'virtual-shop', en: '3D Shop', ur: 'تھری ڈی شاپ' },
+  { id: 'about', en: 'Contact Us', ur: 'رابطہ' },
 ];
 
 export const SiteHeader: React.FC<SiteHeaderProps> = ({
@@ -23,6 +24,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   onNavigate,
   onOpenCart,
 }) => {
+  const { lang, isUrdu, toggleLang, t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleNavClick = (page: SitePage) => {
@@ -32,25 +34,38 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[#F3ECE6]/95 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-8 px-4 sm:px-6 lg:px-8">
-        {/* Zone 1: Single-element Brand Wordmark */}
+      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 lg:px-8">
+        {/* Zone 1: Brand Wordmark */}
         <button
           type="button"
           onClick={() => handleNavClick('home')}
           className="group shrink-0 text-left transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#EA4E1B]"
         >
-          <div className="font-display text-sm sm:text-base tracking-tight transition-colors" style={{ fontStyle: 'normal', textDecorationLine: 'none', fontWeight: 'bold', fontFamily: 'Georgia', textAlign: 'left', color: '#000000' }}>
+          <div
+            className="font-display text-sm tracking-tight transition-colors sm:text-base"
+            style={{
+              fontStyle: 'normal',
+              textDecorationLine: 'none',
+              fontWeight: 'bold',
+              fontFamily: 'Georgia',
+              textAlign: 'left',
+              color: '#000000',
+            }}
+          >
             Usman Mobile Repairing Centre
           </div>
-          <div className="text-[10px] font-medium tracking-wide" style={{ fontFamily: 'Verdana', color: '#cf1c1c' }}>
-            Expert Repairs & Accessories
+          <div
+            className={`text-[10px] font-medium tracking-wide ${isUrdu ? 'font-urdu text-[11px]' : ''}`}
+            style={{ fontFamily: isUrdu ? undefined : 'Verdana', color: '#cf1c1c' }}
+          >
+            {t('Expert Repairs & Accessories', 'ماہر ریپئرنگ، ایسسریز اور استعمال شدہ فون')}
           </div>
         </button>
 
         {/* Zone 2: 5 Clean Single-Line Navigation Links */}
         <nav
           aria-label="Primary navigation"
-          className="hidden items-center gap-8 md:flex"
+          className="hidden items-center gap-7 md:flex lg:gap-8"
         >
           {NAV_ITEMS.map((item) => {
             const isActive = activePage === item.id;
@@ -61,12 +76,14 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
                 onClick={() => handleNavClick(item.id)}
                 aria-current={isActive ? 'page' : undefined}
                 className={`relative shrink-0 whitespace-nowrap py-1 text-sm transition-all duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#EA4E1B] ${
+                  isUrdu ? 'font-urdu text-[15px]' : ''
+                } ${
                   isActive
                     ? 'font-bold text-[#141414]'
                     : 'font-medium text-neutral-600 hover:text-[#EA4E1B]'
                 }`}
               >
-                {item.label}
+                {isUrdu ? item.ur : item.en}
                 {isActive && (
                   <span
                     aria-hidden="true"
@@ -78,16 +95,33 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Cart + Mobile Menu Trigger */}
+        {/* Zone 3: Language Switcher + Cart + Mobile Menu Trigger */}
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={onOpenCart}
-            className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#EA4E1B] px-5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:bg-[#d44212] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA4E1B]"
+            onClick={toggleLang}
+            aria-label={lang === 'en' ? 'Switch to Urdu' : 'Switch to English'}
+            title={lang === 'en' ? 'اردو میں دیکھیں' : 'View in English'}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-black/12 bg-white px-3 text-xs font-bold text-[#141414] shadow-2xs transition hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
           >
-            <ShoppingBag className="h-4 w-4 shrink-0 transition-transform duration-200 hover:scale-110" aria-hidden="true" />
-            <span className="tabular-nums">
-              Cart{cartCount > 0 ? ` (${cartCount})` : ''}
+            <Globe className="h-3.5 w-3.5 shrink-0 text-[#EA4E1B]" aria-hidden="true" />
+            <span className={lang === 'en' ? 'font-urdu text-xs font-semibold' : ''}>
+              {lang === 'en' ? 'اردو' : 'EN'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenCart}
+            className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#EA4E1B] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:bg-[#d44212] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA4E1B] sm:px-5"
+          >
+            <ShoppingBag
+              className="h-4 w-4 shrink-0 transition-transform duration-200 hover:scale-110"
+              aria-hidden="true"
+            />
+            <span className={`tabular-nums ${isUrdu ? 'font-urdu' : ''}`}>
+              {t('Cart', 'کارٹ')}
+              {cartCount > 0 ? ` (${cartCount})` : ''}
             </span>
           </button>
 
@@ -123,13 +157,17 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
                   onClick={() => handleNavClick(item.id)}
                   aria-current={isActive ? 'page' : undefined}
                   className={`flex min-h-[44px] items-center justify-between py-2.5 text-left text-sm ${
+                    isUrdu ? 'font-urdu text-base' : ''
+                  } ${
                     isActive
                       ? 'font-bold text-[#EA4E1B]'
                       : 'font-medium text-neutral-700 hover:text-[#141414]'
                   }`}
                 >
-                  <span>{item.label}</span>
-                  {isActive && <span className="text-xs text-[#EA4E1B]">Active</span>}
+                  <span>{isUrdu ? item.ur : item.en}</span>
+                  {isActive && (
+                    <span className="text-xs text-[#EA4E1B]">{t('Active', 'موجودہ')}</span>
+                  )}
                 </button>
               );
             })}

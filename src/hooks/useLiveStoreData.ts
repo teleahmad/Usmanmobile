@@ -1,14 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
+import {
+  DEFAULT_SOCIAL_LINKS,
+  SocialLinksConfig,
+} from '../components/SocialLinksBar';
 import {
   CATALOG_PRODUCTS,
   CatalogProduct,
-  ProductCategory,
   SHOP_GALLERY,
   ShopGalleryPhoto,
   SITE_IMAGES,
 } from '../data/catalogData';
+import type { UsedPhoneItem } from '../data/usedPhonesData';
 import { db } from '../firebase';
+
+export interface LiveCustomerReview {
+  id: string;
+  customerName: string;
+  maskedPhone: string;
+  rating: number;
+  service?: string;
+  comment: string;
+  createdAt: string;
+  updatedAt: string;
+  isSeed?: boolean;
+}
 
 export type SiteMediaSlotKey =
   | 'realInteriorCounter'
@@ -119,6 +135,8 @@ export const SITE_MEDIA_SLOTS: SiteMediaSlotConfig[] = [
 export function useLiveStoreData() {
   const [productDocs, setProductDocs] = useState<Record<string, FirestoreProductDoc>>({});
   const [mediaOverrides, setMediaOverrides] = useState<Record<string, SiteMediaOverride>>({});
+  const [liveReviews, setLiveReviews] = useState<LiveCustomerReview[]>([]);
+  const [socialLinks, setSocialLinks] = useState<SocialLinksConfig>(DEFAULT_SOCIAL_LINKS);
 
   useEffect(() => {
     const unsubProducts = onSnapshot(
@@ -158,9 +176,59 @@ export function useLiveStoreData() {
       },
     );
 
+    const unsubReviews = onSnapshot(
+      collection(db, 'reviews'),
+      (snap) => {
+        const loaded: LiveCustomerReview[] = snap.docs
+          .map((docSnap) => {
+            const d = docSnap.data() as Partial<LiveCustomerReview>;
+            return {
+              id: docSnap.id,
+              customerName: d.customerName || 'Customer',
+              maskedPhone: d.maskedPhone || '••••••0000',
+              rating: typeof d.rating === 'number' ? d.rating : 5,
+              service: d.service || '',
+              comment: d.comment || '',
+              createdAt: d.createdAt || '',
+              updatedAt: d.updatedAt || d.createdAt || '',
+            };
+          })
+          .filter((r) => r.comment.trim().length > 0)
+          .sort((a, b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt));
+        setLiveReviews(loaded);
+      },
+      (err) => {
+        console.warn('Reviews live sync notice:', err.message);
+      },
+    );
+
+    const unsubSocial = onSnapshot(
+      doc(db, 'siteSettings', 'socialLinks'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const d = docSnap.data() as Partial<SocialLinksConfig>;
+          setSocialLinks({
+            tiktok: typeof d.tiktok === 'string' ? d.tiktok : '',
+            youtube: typeof d.youtube === 'string' ? d.youtube : '',
+            facebook: typeof d.facebook === 'string' ? d.facebook : '',
+            instagram: typeof d.instagram === 'string' ? d.instagram : '',
+            x: typeof d.x === 'string' ? d.x : '',
+            updatedAt: typeof d.updatedAt === 'string' ? d.updatedAt : undefined,
+          });
+        } else {
+          setSocialLinks(DEFAULT_SOCIAL_LINKS);
+        }
+      },
+      (err) => {
+        console.warn('Social links live sync notice:', err.message);
+      },
+    );
+
     return () => {
       unsubProducts();
       unsubMedia();
+      unsubReviews();
+      unsubSocial();
     };
   }, []);
 
@@ -169,52 +237,55 @@ export function useLiveStoreData() {
 
     const mergedDefaults: LiveCatalogProduct[] = CATALOG_PRODUCTS.flatMap(
       (base): LiveCatalogProduct[] => {
-      seenIds.add(base.id);
-      const override = productDocs[base.id];
-      if (override?.deleted) {
-        return [];
-      }
-      if (!override) {
-        return [{ ...base, inStock: true, hidden: false, isCustom: false, isOverridden: false }];
-      }
-      const inStock = override.inStock !== undefined ? override.inStock : true;
-      return [{
-        ...base,
-        sku: override.sku || base.sku,
-        shopItemKey: override.shopItemKey || base.shopItemKey,
-        name: override.name || base.name,
-        category: override.category || base.category,
-        pricePkr: typeof override.pricePkr === 'number' ? override.pricePkr : base.pricePkr,
-        originalPricePkr:
-          typeof override.originalPricePkr === 'number'
-            ? override.originalPricePkr
-            : base.originalPricePkr,
-        discountPercent:
-          typeof override.discountPercent === 'number'
-            ? override.discountPercent
-            : base.discountPercent,
-        rating: override.rating || base.rating,
-        reviewsCount:
-          typeof override.reviewsCount === 'number'
-            ? override.reviewsCount
-            : base.reviewsCount,
-        soldCount: override.soldCount || base.soldCount,
-        status: override.status || (inStock ? base.status : 'Out of Stock'),
-        inStock,
-        hidden: Boolean(override.hidden),
-        featured: override.featured !== undefined ? override.featured : base.featured,
-        specs: override.specs || base.specs,
-        description: override.description || base.description,
-        warrantyNote: override.warrantyNote || base.warrantyNote,
-        image: override.image || base.image,
-        variants:
-          Array.isArray(override.variants) && override.variants.length > 0
-            ? override.variants
-            : base.variants,
-        isCustom: false,
-        isOverridden: true,
-      }];
-    });
+        seenIds.add(base.id);
+        const override = productDocs[base.id];
+        if (override?.deleted) {
+          return [];
+        }
+        if (!override) {
+          return [{ ...base, inStock: true, hidden: false, isCustom: false, isOverridden: false }];
+        }
+        const inStock = override.inStock !== undefined ? override.inStock : true;
+        return [
+          {
+            ...base,
+            sku: override.sku || base.sku,
+            shopItemKey: override.shopItemKey || base.shopItemKey,
+            name: override.name || base.name,
+            category: override.category || base.category,
+            pricePkr: typeof override.pricePkr === 'number' ? override.pricePkr : base.pricePkr,
+            originalPricePkr:
+              typeof override.originalPricePkr === 'number'
+                ? override.originalPricePkr
+                : base.originalPricePkr,
+            discountPercent:
+              typeof override.discountPercent === 'number'
+                ? override.discountPercent
+                : base.discountPercent,
+            rating: override.rating || base.rating,
+            reviewsCount:
+              typeof override.reviewsCount === 'number'
+                ? override.reviewsCount
+                : base.reviewsCount,
+            soldCount: override.soldCount || base.soldCount,
+            status: override.status || (inStock ? base.status : 'Out of Stock'),
+            inStock,
+            hidden: Boolean(override.hidden),
+            featured: override.featured !== undefined ? override.featured : base.featured,
+            specs: override.specs || base.specs,
+            description: override.description || base.description,
+            warrantyNote: override.warrantyNote || base.warrantyNote,
+            image: override.image || base.image,
+            variants:
+              Array.isArray(override.variants) && override.variants.length > 0
+                ? override.variants
+                : base.variants,
+            isCustom: false,
+            isOverridden: true,
+          },
+        ];
+      },
+    );
 
     const customProducts: LiveCatalogProduct[] = Object.entries(productDocs)
       .filter(([id, data]) => !seenIds.has(id) && !data.deleted)
@@ -271,6 +342,8 @@ export function useLiveStoreData() {
     [allProducts],
   );
 
+  const usedPhones = useMemo<UsedPhoneItem[]>(() => [], []);
+
   const liveSiteImages = useMemo(
     () => ({
       ...SITE_IMAGES,
@@ -311,6 +384,9 @@ export function useLiveStoreData() {
   return {
     products: visibleProducts,
     allProducts,
+    usedPhones,
+    liveReviews,
+    socialLinks,
     siteImages: liveSiteImages,
     shopGallery: liveShopGallery,
     mediaOverrides,

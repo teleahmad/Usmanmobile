@@ -30,6 +30,59 @@
       },
       "required": ["name", "category", "pricePkr", "inStock"]
     },
+    "UsedPhone": {
+      "title": "UsedPhone",
+      "description": "Pre-owned or second-hand smartphone available at Usman Mobile Repairing Centre",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 100 },
+        "brand": { "type": "string", "maxLength": 40 },
+        "pricePkr": { "type": "number" },
+        "marketPricePkr": { "type": "number" },
+        "storage": { "type": "string", "maxLength": 40 },
+        "condition": { "type": "string", "maxLength": 40 },
+        "ptaStatus": {
+          "type": "string",
+          "enum": ["PTA Approved", "Non-PTA", "JV / Patch", "Official Warranty"],
+          "maxLength": 30
+        },
+        "batteryHealth": { "type": "string", "maxLength": 40 },
+        "accessories": { "type": "string", "maxLength": 80 },
+        "warrantyNote": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 600 },
+        "photos": { "type": "array" },
+        "available": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "brand", "pricePkr", "storage", "condition", "ptaStatus", "available"]
+    },
+    "CustomerReview": {
+      "title": "CustomerReview",
+      "description": "Public customer rating and review with privacy-masked last 4 phone digits only",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string", "maxLength": 60 },
+        "maskedPhone": { "type": "string", "maxLength": 20 },
+        "rating": { "type": "number" },
+        "service": { "type": "string", "maxLength": 60 },
+        "comment": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerName", "maskedPhone", "rating", "comment", "createdAt", "updatedAt"]
+    },
+    "ReviewKey": {
+      "title": "ReviewKey",
+      "description": "Private non-readable phone hash proof allowing customers to edit only their own review",
+      "type": "object",
+      "properties": {
+        "phoneHash": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["phoneHash", "updatedAt"]
+    },
     "SiteMedia": {
       "title": "SiteMedia",
       "description": "Customizable shop interior, exterior, signboard, and hero images",
@@ -42,6 +95,19 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["slotKey", "imageUrl"]
+    },
+    "SocialLinks": {
+      "title": "SocialLinks",
+      "description": "Shop social media profile URLs managed by admin for footer buttons",
+      "type": "object",
+      "properties": {
+        "tiktok": { "type": "string", "maxLength": 300 },
+        "youtube": { "type": "string", "maxLength": 300 },
+        "facebook": { "type": "string", "maxLength": 300 },
+        "instagram": { "type": "string", "maxLength": 300 },
+        "x": { "type": "string", "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 40 }
+      }
     },
     "RepairTicket": {
       "title": "RepairTicket",
@@ -103,9 +169,25 @@
       "schema": "Product",
       "description": "Retail catalog products list with admin overrides and additions"
     },
+    "/usedPhones/{phoneId}": {
+      "schema": "UsedPhone",
+      "description": "Second-hand / used smartphones inventory managed by admin"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "CustomerReview",
+      "description": "Public customer reviews with privacy-masked phone last 4 digits"
+    },
+    "/reviewKeys/{reviewId}": {
+      "schema": "ReviewKey",
+      "description": "Private hashed ownership proof for customer self-editing of reviews"
+    },
     "/siteMedia/{slotId}": {
       "schema": "SiteMedia",
       "description": "Shop interior, storefront, signboard, and gallery photos managed by admin"
+    },
+    "/siteSettings/{settingId}": {
+      "schema": "SocialLinks",
+      "description": "Shop social media links (TikTok, YouTube, Facebook, Instagram, X) managed by admin"
     },
     "/repairs/{repairId}": {
       "schema": "RepairTicket",

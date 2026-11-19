@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Search, Star, Store, X } from 'lucide-react';
 import { ViewMode } from '../config/shopConfig';
+import { useLanguage } from '../context/LanguageContext';
 import {
   CATALOG_PRODUCTS,
   CatalogProduct,
@@ -8,11 +9,14 @@ import {
   PRODUCT_CATEGORIES,
   ProductCategory,
 } from '../data/catalogData';
+import { matchesProductQuery } from '../utils/catalogSearch';
 import { ResilientImage } from './ResilientImage';
 
 interface ProductsPageProps {
   products?: CatalogProduct[];
   initialCategory?: ProductCategory;
+  externalSearchQuery?: string;
+  onExternalSearchChange?: (next: string) => void;
   onInspectProduct: (product: CatalogProduct) => void;
   onQuickAddToCart: (product: CatalogProduct) => void;
   onOpenVirtualShop: (mode: ViewMode) => void;
@@ -23,11 +27,19 @@ type SortOrder = 'featured' | 'price-asc' | 'price-desc';
 export const ProductsPage: React.FC<ProductsPageProps> = ({
   products = CATALOG_PRODUCTS,
   initialCategory = 'All',
+  externalSearchQuery,
+  onExternalSearchChange,
   onInspectProduct,
   onQuickAddToCart,
   onOpenVirtualShop,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const { t, isUrdu } = useLanguage();
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : localSearchQuery;
+  const setSearchQuery = (next: string) => {
+    setLocalSearchQuery(next);
+    onExternalSearchChange?.(next);
+  };
   const [selectedCategory, setSelectedCategory] =
     useState<ProductCategory>(initialCategory);
   const [sortOrder, setSortOrder] = useState<SortOrder>('featured');
@@ -48,16 +60,10 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
     const list = products.filter((item) => {
       const matchesCategory =
         selectedCategory === 'All' || item.category === selectedCategory;
-      const matchesQuery =
-        !q ||
-        item.name.toLowerCase().includes(q) ||
-        item.category.toLowerCase().includes(q) ||
-        item.specs.toLowerCase().includes(q) ||
-        item.sku.toLowerCase().includes(q);
+      const matchesQuery = matchesProductQuery(item, searchQuery);
       return matchesCategory && matchesQuery;
     });
 
@@ -92,21 +98,29 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
         <div className="mx-auto max-w-[1200px] px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-3 lg:flex-row lg:items-end">
             <div>
-              <p className="text-[11px] font-semibold text-[#EA4E1B] sm:text-xs">
-                Usman Mobile Stock · Cash on Pickup or Local Delivery
+              <p className={`text-[11px] font-semibold text-[#EA4E1B] sm:text-xs ${isUrdu ? 'font-urdu' : ''}`}>
+                {t(
+                  'Usman Mobile Stock · Cash on Pickup or Local Delivery',
+                  'عثمان موبائل اسٹاک · دکان پر کیش یا مقامی ڈیلیوری',
+                )}
               </p>
-              <h1 className="font-display mt-1 text-2xl font-extrabold tracking-tight text-[#141414] sm:text-4xl">
-                Shop All <span className="text-[#EA4E1B]">Products</span>
+              <h1
+                className={`font-display mt-1 text-2xl font-extrabold tracking-tight text-[#141414] sm:text-4xl ${
+                  isUrdu ? 'font-urdu' : ''
+                }`}
+              >
+                {t('Shop All', 'تمام')}{' '}
+                <span className="text-[#EA4E1B]">{t('Products', 'پراڈکٹس')}</span>
               </h1>
             </div>
 
             <button
               type="button"
               onClick={() => onOpenVirtualShop('shop')}
-              className="hidden sm:inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-neutral-300 bg-white px-5 text-xs font-semibold text-[#141414] transition-colors hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+              className="hidden h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-neutral-300 bg-white px-5 text-xs font-semibold text-[#141414] transition-colors hover:border-[#EA4E1B] hover:text-[#EA4E1B] sm:inline-flex"
             >
               <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
-              View Shelves in 3D Shop
+              {t('View Shelves in 3D Shop', 'تھری ڈی شاپ دیکھیں')}
             </button>
           </div>
 
@@ -200,17 +214,17 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
         {filteredProducts.length === 0 ? (
           <div className="rounded-2xl bg-white px-6 py-16 text-center shadow-xs">
             <h2 className="font-display text-lg font-bold text-[#141414]">
-              No matching products found
+              No matching items found
             </h2>
             <p className="mt-1.5 text-sm text-neutral-500">
-              Try another search keyword or clear the category filter.
+              Try another search keyword or reset the active filters.
             </p>
             <button
               type="button"
               onClick={resetFilters}
-              className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#EA4E1B] px-6 text-xs font-semibold text-white hover:bg-[#d44212]"
+              className="mt-5 inline-flex h-10 items-center justify-center rounded-full bg-[#F25C19] px-6 text-xs font-semibold text-white hover:bg-[#d94d10]"
             >
-              Show All Products
+              Reset Search
             </button>
           </div>
         ) : (

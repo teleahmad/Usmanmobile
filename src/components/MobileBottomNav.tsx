@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Compass, Home, MessageCircle, ShoppingBag, Store } from 'lucide-react';
 import { getWhatsAppUrl } from '../config/shopConfig';
+import { useLanguage } from '../context/LanguageContext';
 import { SitePage } from '../data/catalogData';
 
 interface MobileBottomNavProps {
@@ -14,11 +15,11 @@ interface MobileBottomNavProps {
 const TAB_COUNT = 5;
 
 const TABS = [
-  { id: 'home', label: 'Home', Icon: Home },
-  { id: 'products', label: 'Products', Icon: Store },
-  { id: 'shop3d', label: '3D Shop', Icon: Compass },
-  { id: 'cart', label: 'Cart', Icon: ShoppingBag },
-  { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
+  { id: 'home', en: 'Home', ur: 'ہوم', Icon: Home },
+  { id: 'products', en: 'Products', ur: 'پراڈکٹس', Icon: Store },
+  { id: 'shop3d', en: '3D Shop', ur: '3D شاپ', Icon: Compass },
+  { id: 'cart', en: 'Cart', ur: 'کارٹ', Icon: ShoppingBag },
+  { id: 'whatsapp', en: 'WhatsApp', ur: 'واٹس ایپ', Icon: MessageCircle },
 ] as const;
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -28,6 +29,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onNavigate,
   onOpenCart,
 }) => {
+  const { isUrdu } = useLanguage();
   const trackRef = useRef<HTMLDivElement | null>(null);
   const lensRef = useRef<HTMLDivElement | null>(null);
   const pointerIdRef = useRef<number | null>(null);
@@ -263,7 +265,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           </div>
         )}
 
-        {TABS.map(({ id, label, Icon }, idx) => {
+        {TABS.map(({ id, en, ur, Icon }, idx) => {
           const isSelected = highlightedIndex === idx;
           const isWhatsApp = idx === 4;
           const colorClass = isSelected
@@ -305,7 +307,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   </span>
                 )}
               </div>
-              <span className="leading-none tracking-tight">{label}</span>
+              <span className={`leading-none tracking-tight ${isUrdu ? 'font-urdu text-[10px]' : ''}`}>
+                {isUrdu ? ur : en}
+              </span>
             </button>
           );
         })}

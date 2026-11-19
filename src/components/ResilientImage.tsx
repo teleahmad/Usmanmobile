@@ -6,6 +6,8 @@ interface ResilientImageProps {
   alt: string;
   className?: string;
   fallbackTitle?: string;
+  /** Set true only for above-the-fold hero imagery; defaults to lazy loading for fast page loads. */
+  priority?: boolean;
 }
 
 export const ResilientImage: React.FC<ResilientImageProps> = ({
@@ -13,8 +15,10 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
   alt,
   className = 'h-full w-full object-cover',
   fallbackTitle,
+  priority = false,
 }) => {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   if (failed) {
     return (
@@ -35,9 +39,15 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
     <img
       src={src}
       alt={alt}
+      loading={priority ? 'eager' : 'lazy'}
+      decoding={priority ? 'sync' : 'async'}
+      fetchPriority={priority ? 'high' : 'auto'}
       referrerPolicy="no-referrer"
+      onLoad={() => setLoaded(true)}
       onError={() => setFailed(true)}
-      className={className}
+      className={`${className} transition-opacity duration-300 ${
+        loaded || priority ? 'opacity-100' : 'opacity-0'
+      }`}
     />
   );
 };

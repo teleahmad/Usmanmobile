@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CheckCircle2, Clock, MessageCircle, Search, ShieldCheck, Smartphone, Wrench } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { SHOP_CONFIG } from '../config/shopConfig';
+import { useLanguage } from '../context/LanguageContext';
 import {
   buildRepairQuoteWhatsAppUrl,
   DIGITAL_SERVICES,
@@ -12,6 +13,7 @@ import {
 import { db } from '../firebase';
 
 export const RepairsPage: React.FC = () => {
+  const { t, isUrdu } = useLanguage();
   const [brand, setBrand] = useState<string>(PHONE_BRANDS[0]);
   const [model, setModel] = useState('');
   const [serviceId, setServiceId] = useState(REPAIR_SERVICES[0].id);
@@ -95,15 +97,30 @@ export const RepairsPage: React.FC = () => {
       {/* Header */}
       <section className="border-b border-black/5 bg-white">
         <div className="mx-auto max-w-[1200px] px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
-          <p className="text-xs font-semibold text-[#EA4E1B]">
-            Free Fault Check · Same-Day Service in Chak No. 8
+          <p className={`text-xs font-semibold text-[#EA4E1B] ${isUrdu ? 'font-urdu text-sm' : ''}`}>
+            {t(
+              'Free Fault Check · Same-Day Service in Chak No. 8',
+              'مفت فالٹ چیک · چک نمبر 8 میں ایک ہی دن میں سروس',
+            )}
           </p>
-          <h1 className="font-display mt-1.5 text-3xl font-extrabold tracking-tight text-[#141414] sm:text-4xl">
-            Mobile <span className="text-[#EA4E1B]">Repair Lab</span> &amp; Digital Desk
+          <h1
+            className={`font-display mt-1.5 text-3xl font-extrabold tracking-tight text-[#141414] sm:text-4xl ${
+              isUrdu ? 'font-urdu' : ''
+            }`}
+          >
+            {t('Mobile', 'موبائل')}{' '}
+            <span className="text-[#EA4E1B]">{t('Repair Lab', 'ریپئرنگ لیب')}</span>{' '}
+            {t('& Digital Desk', 'اور ڈیجیٹل ڈیسک')}
           </h1>
-          <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-neutral-600">
-            Select any repair service below to view estimated starting rates and send
-            your handset model straight to Usman Sarwar on WhatsApp.
+          <p
+            className={`mt-2.5 max-w-2xl text-sm leading-relaxed text-neutral-600 ${
+              isUrdu ? 'font-urdu' : ''
+            }`}
+          >
+            {t(
+              'Select any repair service below to view estimated starting rates and send your handset model straight to Usman Sarwar on WhatsApp.',
+              'نیچے دی گئی کسی بھی ریپئرنگ سروس کو منتخب کریں اور اپنے موبائل کا ماڈل براہ راست عثمان سرور کو واٹس ایپ کریں۔',
+            )}
           </p>
 
           {/* Real-time Customer Repair Status Tracker Box */}

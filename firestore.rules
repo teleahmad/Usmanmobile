@@ -21,8 +21,9 @@ service cloud.firestore {
 
     function isBootstrappedAdmin() {
       return isSignedIn() &&
-        (request.auth.token.email == 'teleahmad768@gmail.com' ||
-         request.auth.token.email == 'hkwpro@gmail.com' ||
+        ((request.auth.token.email_verified == true &&
+          (request.auth.token.email == 'teleahmad768@gmail.com' ||
+           request.auth.token.email == 'hkwpro@gmail.com')) ||
          exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
@@ -54,6 +55,50 @@ service cloud.firestore {
              (!('variants' in data) || (data.variants is list && data.variants.size() <= 10));
     }
 
+    function isValidUsedPhone(data) {
+      return data.keys().hasAll(['title', 'brand', 'pricePkr', 'storage', 'condition', 'ptaStatus', 'available']) &&
+             data.keys().hasOnly([
+               'title', 'brand', 'pricePkr', 'marketPricePkr', 'storage', 'condition',
+               'ptaStatus', 'batteryHealth', 'accessories', 'warrantyNote', 'notes',
+               'photos', 'available', 'deleted', 'createdAt', 'updatedAt'
+             ]) &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+             data.brand is string && data.brand.size() >= 1 && data.brand.size() <= 40 &&
+             data.pricePkr is number && data.pricePkr >= 0 &&
+             data.storage is string && data.storage.size() >= 1 && data.storage.size() <= 40 &&
+             data.condition is string && data.condition.size() >= 1 && data.condition.size() <= 40 &&
+             data.ptaStatus in ['PTA Approved', 'Non-PTA', 'JV / Patch', 'Official Warranty'] &&
+             data.available is bool &&
+             (!('marketPricePkr' in data) || (data.marketPricePkr is number && data.marketPricePkr >= 0)) &&
+             (!('batteryHealth' in data) || (data.batteryHealth is string && data.batteryHealth.size() <= 40)) &&
+             (!('accessories' in data) || (data.accessories is string && data.accessories.size() <= 80)) &&
+             (!('warrantyNote' in data) || (data.warrantyNote is string && data.warrantyNote.size() <= 120)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 600)) &&
+             (!('photos' in data) || (data.photos is list && data.photos.size() <= 4 && (data.photos.size() == 0 || (data.photos[0] is string && data.photos[0].size() <= 220000)))) &&
+             (!('deleted' in data) || data.deleted is bool) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 40)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['customerName', 'maskedPhone', 'rating', 'comment', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['customerName', 'maskedPhone', 'rating', 'service', 'comment', 'createdAt', 'updatedAt']) &&
+             data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 60 &&
+             data.maskedPhone is string && data.maskedPhone.size() >= 4 && data.maskedPhone.size() <= 20 &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() >= 4 && data.comment.size() <= 500 &&
+             (!('service' in data) || (data['service'] is string && data['service'].size() <= 60)) &&
+             data.createdAt is string && data.createdAt.size() <= 40 &&
+             data.updatedAt is string && data.updatedAt.size() <= 40;
+    }
+
+    function isValidReviewKey(data) {
+      return data.keys().hasAll(['phoneHash', 'updatedAt']) &&
+             data.keys().hasOnly(['phoneHash', 'updatedAt']) &&
+             data.phoneHash is string && data.phoneHash.size() >= 16 && data.phoneHash.size() <= 64 &&
+             data.updatedAt is string && data.updatedAt.size() <= 40;
+    }
+
     function isValidSiteMedia(data) {
       return data.keys().hasAll(['slotKey', 'imageUrl']) &&
              data.keys().hasOnly(['slotKey', 'title', 'caption', 'imageUrl', 'updatedAt']) &&
@@ -61,6 +106,16 @@ service cloud.firestore {
              data.imageUrl is string && data.imageUrl.size() > 0 && data.imageUrl.size() <= 350000 &&
              (!('title' in data) || (data.title is string && data.title.size() <= 120)) &&
              (!('caption' in data) || (data.caption is string && data.caption.size() <= 300));
+    }
+
+    function isValidSocialLinks(data) {
+      return data.keys().hasOnly(['tiktok', 'youtube', 'facebook', 'instagram', 'x', 'updatedAt']) &&
+             (!('tiktok' in data) || (data.tiktok is string && data.tiktok.size() <= 300)) &&
+             (!('youtube' in data) || (data.youtube is string && data.youtube.size() <= 300)) &&
+             (!('facebook' in data) || (data.facebook is string && data.facebook.size() <= 300)) &&
+             (!('instagram' in data) || (data.instagram is string && data.instagram.size() <= 300)) &&
+             (!('x' in data) || (data.x is string && data.x.size() <= 300)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
     }
 
     function isValidRepair(data) {
@@ -88,7 +143,46 @@ service cloud.firestore {
       allow delete: if isValidId(productId) && isBootstrappedAdmin();
     }
 
-    // 2. Shop Photos & Site Media (Public read for visitors, admin-only write)
+    // 2. Used / Second-Hand Phones (Public read for customers, admin-only manage)
+    match /usedPhones/{phoneId} {
+      allow read: if true;
+      allow create: if isValidId(phoneId) && isBootstrappedAdmin() && isValidUsedPhone(incoming());
+      allow update: if isValidId(phoneId) && isBootstrappedAdmin() && isValidUsedPhone(incoming());
+      allow delete: if isValidId(phoneId) && isBootstrappedAdmin();
+    }
+
+    // 3. Public Customer Reviews (Masked last 4 digits only; atomic key proof required for self-edit)
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isValidId(reviewId) &&
+        isValidReview(incoming()) &&
+        existsAfter(/databases/$(database)/documents/reviewKeys/$(reviewId));
+      allow update: if isValidId(reviewId) &&
+        isValidReview(incoming()) && (
+          isBootstrappedAdmin() || (
+            incoming().maskedPhone == resource.data.maskedPhone &&
+            incoming().createdAt == resource.data.createdAt &&
+            incoming().diff(resource.data).affectedKeys().hasOnly(['customerName', 'rating', 'service', 'comment', 'updatedAt']) &&
+            getAfter(/databases/$(database)/documents/reviewKeys/$(reviewId)).data.updatedAt == incoming().updatedAt
+          )
+        );
+      allow delete: if isValidId(reviewId) && isBootstrappedAdmin();
+    }
+
+    // 4. Private Review Ownership Keys (Never publicly readable; protects customer self-edits)
+    match /reviewKeys/{reviewId} {
+      allow read: if false;
+      allow create: if isValidId(reviewId) &&
+        isValidReviewKey(incoming()) &&
+        existsAfter(/databases/$(database)/documents/reviews/$(reviewId));
+      allow update: if isValidId(reviewId) &&
+        isValidReviewKey(incoming()) &&
+        incoming().phoneHash == resource.data.phoneHash &&
+        incoming().diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
+      allow delete: if isValidId(reviewId) && isBootstrappedAdmin();
+    }
+
+    // 5. Shop Photos & Site Media (Public read for visitors, admin-only write)
     match /siteMedia/{slotId} {
       allow read: if true;
       allow create: if isValidId(slotId) && isBootstrappedAdmin() && isValidSiteMedia(incoming());
@@ -96,7 +190,15 @@ service cloud.firestore {
       allow delete: if isValidId(slotId) && isBootstrappedAdmin();
     }
 
-    // 3. Repair Tickets (Public read for tracking repair by token, admin-only manage)
+    // 5b. Shop Social Media Links & Settings (Public read for footer buttons, admin-only write)
+    match /siteSettings/{settingId} {
+      allow read: if true;
+      allow create: if settingId == 'socialLinks' && isBootstrappedAdmin() && isValidSocialLinks(incoming());
+      allow update: if settingId == 'socialLinks' && isBootstrappedAdmin() && isValidSocialLinks(incoming());
+      allow delete: if isValidId(settingId) && isBootstrappedAdmin();
+    }
+
+    // 6. Repair Tickets (Public read for tracking repair by token, admin-only manage)
     match /repairs/{repairId} {
       allow read: if true;
       allow create: if isValidId(repairId) && isBootstrappedAdmin() && isValidRepair(incoming());
@@ -104,7 +206,7 @@ service cloud.firestore {
       allow delete: if isValidId(repairId) && isBootstrappedAdmin();
     }
 
-    // 4. Customer Orders (Public creation on checkout, admin-only manage)
+    // 7. Customer Orders (Public creation on checkout, admin-only manage)
     match /orders/{orderId} {
       allow create: if isValidId(orderId) && isValidOrder(incoming());
       allow read: if isBootstrappedAdmin();
@@ -112,7 +214,7 @@ service cloud.firestore {
       allow delete: if isValidId(orderId) && isBootstrappedAdmin();
     }
 
-    // 5. Admin Whitelist
+    // 8. Admin Whitelist
     match /admins/{adminId} {
       allow read: if isBootstrappedAdmin() && isValidId(adminId);
       allow write: if isBootstrappedAdmin() && isValidId(adminId);

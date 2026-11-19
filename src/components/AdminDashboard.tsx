@@ -13,9 +13,11 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Share2,
   Shield,
   ShoppingBag,
   Smartphone,
+  Star,
   Trash2,
   User,
   Wrench,
@@ -35,12 +37,23 @@ import {
 } from 'firebase/firestore';
 import { getWhatsAppUrl, SHOP_CONFIG } from '../config/shopConfig';
 import { CATALOG_PRODUCTS, formatPkr, SitePage } from '../data/catalogData';
+import { UsedPhoneItem } from '../data/usedPhonesData';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../firebase';
-import { LiveCatalogProduct, SiteMediaOverride } from '../hooks/useLiveStoreData';
+import {
+  LiveCatalogProduct,
+  LiveCustomerReview,
+  SiteMediaOverride,
+} from '../hooks/useLiveStoreData';
 import {
   AdminProductsManager,
   AdminShopPhotosManager,
 } from './AdminProductPhotosControls';
+import {
+  AdminReviewsManager,
+  AdminUsedPhonesManager,
+} from './AdminUsedPhonesAndReviews';
+import { AdminSocialLinksManager } from './AdminSocialLinksManager';
+import { DEFAULT_SOCIAL_LINKS, SocialLinksConfig } from './SocialLinksBar';
 
 export interface RepairTicketData {
   id: string;
@@ -70,6 +83,9 @@ export interface OrderData {
 
 interface AdminDashboardProps {
   products: LiveCatalogProduct[];
+  usedPhones?: UsedPhoneItem[];
+  liveReviews?: LiveCustomerReview[];
+  socialLinks?: SocialLinksConfig;
   mediaOverrides: Record<string, SiteMediaOverride>;
   onNavigate: (page: SitePage) => void;
 }
@@ -78,12 +94,17 @@ const AUTHORIZED_ADMIN_EMAILS = ['teleahmad768@gmail.com', 'hkwpro@gmail.com'];
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   products,
+  usedPhones = [],
+  liveReviews = [],
+  socialLinks = DEFAULT_SOCIAL_LINKS,
   mediaOverrides,
   onNavigate,
 }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'repairs' | 'orders' | 'products' | 'photos'>('products');
+  const [activeTab, setActiveTab] = useState<
+    'repairs' | 'orders' | 'products' | 'used-phones' | 'photos' | 'social' | 'reviews'
+  >('products');
   const [repairs, setRepairs] = useState<RepairTicketData[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -503,6 +524,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <button
                 type="button"
+                onClick={() => setActiveTab('used-phones')}
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition border-b-2 ${
+                  activeTab === 'used-phones'
+                    ? 'border-[#EA4E1B] text-[#EA4E1B]'
+                    : 'border-transparent text-neutral-500 hover:text-[#141414]'
+                }`}
+              >
+                <Smartphone className="h-4 w-4" />
+                <span>Used Phones ({usedPhones.length})</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActiveTab('photos')}
                 className={`flex items-center gap-2 pb-3 text-sm font-bold transition border-b-2 ${
                   activeTab === 'photos'
@@ -512,6 +546,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Camera className="h-4 w-4" />
                 <span>Shop Photos</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('social')}
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition border-b-2 ${
+                  activeTab === 'social'
+                    ? 'border-[#EA4E1B] text-[#EA4E1B]'
+                    : 'border-transparent text-neutral-500 hover:text-[#141414]'
+                }`}
+              >
+                <Share2 className="h-4 w-4" />
+                <span>Social Links</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('reviews')}
+                className={`flex items-center gap-2 pb-3 text-sm font-bold transition border-b-2 ${
+                  activeTab === 'reviews'
+                    ? 'border-[#EA4E1B] text-[#EA4E1B]'
+                    : 'border-transparent text-neutral-500 hover:text-[#141414]'
+                }`}
+              >
+                <Star className="h-4 w-4" />
+                <span>Reviews ({liveReviews.length})</span>
               </button>
 
               <button
@@ -836,11 +896,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             )}
 
-            {/* TAB 4: SHOP INTERIOR & EXTERIOR PHOTOS MANAGER */}
+            {/* TAB 4: USED / SECOND-HAND PHONES MANAGER */}
+            {activeTab === 'used-phones' && (
+              <AdminUsedPhonesManager
+                usedPhones={usedPhones}
+                onFeedback={setFeedbackMsg}
+              />
+            )}
+
+            {/* TAB 5: SHOP INTERIOR & EXTERIOR PHOTOS MANAGER */}
             {activeTab === 'photos' && (
               <AdminShopPhotosManager
                 mediaOverrides={mediaOverrides}
                 setFeedbackMsg={setFeedbackMsg}
+              />
+            )}
+
+            {/* TAB 5B: SOCIAL MEDIA LINKS MANAGER */}
+            {activeTab === 'social' && (
+              <AdminSocialLinksManager
+                socialLinks={socialLinks}
+                setFeedbackMsg={setFeedbackMsg}
+              />
+            )}
+
+            {/* TAB 6: LIVE CUSTOMER REVIEWS MANAGER */}
+            {activeTab === 'reviews' && (
+              <AdminReviewsManager
+                liveReviews={liveReviews}
+                onFeedback={setFeedbackMsg}
               />
             )}
           </div>

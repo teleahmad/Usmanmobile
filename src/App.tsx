@@ -1,17 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
-import { AboutContactPage } from './components/AboutContactPage';
-import { AdminDashboard } from './components/AdminDashboard';
 import { CartDrawer } from './components/CartDrawer';
+import { FloatingWhatsAppButton } from './components/FloatingWhatsAppButton';
+import { GlobalSearchBar } from './components/GlobalSearchBar';
 import { HomePage } from './components/HomePage';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { ProductDetailModal } from './components/ProductDetailModal';
-import { ProductsPage } from './components/ProductsPage';
-import { RepairsPage } from './components/RepairsPage';
-import { ShopHud } from './components/ShopHud';
-import { ShopInfoDrawer } from './components/ShopInfoDrawer';
-import { OverlayDomRefs, ShopViewport } from './components/ShopViewport';
+import type { OverlayDomRefs } from './components/ShopViewport';
 import { SiteFooter } from './components/SiteFooter';
 import { SiteHeader } from './components/SiteHeader';
 import {
@@ -29,6 +25,41 @@ import {
   SitePage,
 } from './data/catalogData';
 import { useLiveStoreData } from './hooks/useLiveStoreData';
+
+const AboutContactPage = lazy(() =>
+  import('./components/AboutContactPage').then((m) => ({ default: m.AboutContactPage })),
+);
+const AdminDashboard = lazy(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+);
+const ProductsPage = lazy(() =>
+  import('./components/ProductsPage').then((m) => ({ default: m.ProductsPage })),
+);
+const RepairsPage = lazy(() =>
+  import('./components/RepairsPage').then((m) => ({ default: m.RepairsPage })),
+);
+const ShopHud = lazy(() =>
+  import('./components/ShopHud').then((m) => ({ default: m.ShopHud })),
+);
+const ShopInfoDrawer = lazy(() =>
+  import('./components/ShopInfoDrawer').then((m) => ({ default: m.ShopInfoDrawer })),
+);
+const ShopViewport = lazy(() =>
+  import('./components/ShopViewport').then((m) => ({ default: m.ShopViewport })),
+);
+
+function PageLoader({ dark = false }: { dark?: boolean }) {
+  return (
+    <div
+      className={`flex min-h-[50vh] w-full flex-col items-center justify-center gap-3 ${
+        dark ? 'h-[calc(100dvh-4rem)] bg-[#0A1120] text-white' : 'bg-[#F3ECE6] text-[#141414]'
+      }`}
+    >
+      <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#EA4E1B]/25 border-t-[#EA4E1B]" />
+      <p className="text-xs font-semibold opacity-70">Loading...</p>
+    </div>
+  );
+}
 
 const CART_STORAGE_KEY = 'usman_mobile_cart_v1';
 
@@ -65,10 +96,14 @@ export default function App() {
   const [cartItems, setCartItems] = useState<CartItem[]>(() => loadSavedCart());
   const [cartOpen, setCartOpen] = useState(false);
   const [inspectedProduct, setInspectedProduct] = useState<CatalogProduct | null>(null);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   const {
     products: liveProducts,
     allProducts: allAdminProducts,
+    usedPhones,
+    liveReviews,
+    socialLinks,
     siteImages: liveSiteImages,
     shopGallery: liveShopGallery,
     mediaOverrides,
@@ -367,10 +402,23 @@ export default function App() {
         onOpenCart={() => setCartOpen(true)}
       />
 
+      {activePage !== 'virtual-shop' && activePage !== 'admin' && (
+        <GlobalSearchBar
+          query={globalSearchQuery}
+          onQueryChange={setGlobalSearchQuery}
+          activePage={activePage}
+          products={liveProducts}
+          onInspectProduct={handleInspectProduct}
+          onQuickAddToCart={(product) => handleAddToCart(product)}
+          onNavigate={handleNavigate}
+        />
+      )}
+
       <main className="flex-1">
         {activePage === 'home' && (
           <HomePage
             products={liveProducts}
+            liveReviews={liveReviews}
             siteImages={liveSiteImages}
             onNavigate={handleNavigate}
             onBrowseCategory={handleBrowseCategory}
@@ -381,94 +429,113 @@ export default function App() {
         )}
 
         {activePage === 'products' && (
-          <ProductsPage
-            products={liveProducts}
-            initialCategory={initialProductCategory}
-            onInspectProduct={handleInspectProduct}
-            onQuickAddToCart={(product) => handleAddToCart(product)}
-            onOpenVirtualShop={handleOpenVirtualShop}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <ProductsPage
+              products={liveProducts}
+              initialCategory={initialProductCategory}
+              externalSearchQuery={globalSearchQuery}
+              onExternalSearchChange={setGlobalSearchQuery}
+              onInspectProduct={handleInspectProduct}
+              onQuickAddToCart={(product) => handleAddToCart(product)}
+              onOpenVirtualShop={handleOpenVirtualShop}
+            />
+          </Suspense>
         )}
 
-        {activePage === 'repairs' && <RepairsPage />}
+        {activePage === 'repairs' && (
+          <Suspense fallback={<PageLoader />}>
+            <RepairsPage />
+          </Suspense>
+        )}
 
         {activePage === 'about' && (
-          <AboutContactPage
-            siteImages={liveSiteImages}
-            shopGallery={liveShopGallery}
-            onOpenVirtualShop={handleOpenVirtualShop}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <AboutContactPage
+              siteImages={liveSiteImages}
+              shopGallery={liveShopGallery}
+              liveReviews={liveReviews}
+              onOpenVirtualShop={handleOpenVirtualShop}
+            />
+          </Suspense>
         )}
 
         {activePage === 'admin' && (
-          <AdminDashboard
-            products={allAdminProducts}
-            mediaOverrides={mediaOverrides}
-            onNavigate={handleNavigate}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <AdminDashboard
+              products={allAdminProducts}
+              usedPhones={usedPhones}
+              liveReviews={liveReviews}
+              socialLinks={socialLinks}
+              mediaOverrides={mediaOverrides}
+              onNavigate={handleNavigate}
+            />
+          </Suspense>
         )}
 
         {activePage === 'virtual-shop' && (
-          <div className="relative h-[calc(100dvh-4rem)] w-full overflow-hidden overscroll-none bg-[#0A1120] select-none">
-            <ShopViewport
-              viewMode={viewMode}
-              panoTab={panoTab}
-              roadDetailsVisible={roadDetailsVisible}
-              editPinMode={editPinMode}
-              shopUv={shopUv}
-              overlayDomRef={overlayDomRef}
-              toggleMapTiltRef={toggleMapTiltRef}
-              exitShopRef={exitShopRef}
-              enterShopRef={enterShopRef}
-              onShopUvChange={handleShopUvChange}
-              onModeChange={handleModeChange}
-              onHoveredItemChange={setHoveredItemType}
-              onItemClick={handleProductInspect3D}
-              onShutterOpenChange={setShutterOpen}
-              onMap3DChange={setIsMap3D}
-              onInsideShopChange={handleInsideShopChange}
-            />
+          <Suspense fallback={<PageLoader dark />}>
+            <div className="relative h-[calc(100dvh-4rem)] w-full overflow-hidden overscroll-none bg-[#0A1120] select-none">
+              <ShopViewport
+                viewMode={viewMode}
+                panoTab={panoTab}
+                roadDetailsVisible={roadDetailsVisible}
+                editPinMode={editPinMode}
+                shopUv={shopUv}
+                overlayDomRef={overlayDomRef}
+                toggleMapTiltRef={toggleMapTiltRef}
+                exitShopRef={exitShopRef}
+                enterShopRef={enterShopRef}
+                onShopUvChange={handleShopUvChange}
+                onModeChange={handleModeChange}
+                onHoveredItemChange={setHoveredItemType}
+                onItemClick={handleProductInspect3D}
+                onShutterOpenChange={setShutterOpen}
+                onMap3DChange={setIsMap3D}
+                onInsideShopChange={handleInsideShopChange}
+              />
 
-            <ShopHud
-              viewMode={viewMode}
-              panoTab={panoTab}
-              roadDetailsVisible={roadDetailsVisible}
-              editPinMode={editPinMode}
-              isDefaultPin={isDefaultPin}
-              infoOpen={infoOpen}
-              dockCollapsed={dockCollapsed}
-              shutterOpen={shutterOpen}
-              isMap3D={isMap3D}
-              insideShop={insideShop}
-              hoveredItemType={hoveredItemType}
-              selectedItemType={selectedItemType}
-              overlayDomRef={overlayDomRef}
-              onModeChange={handleModeChange}
-              onPanoTabChange={setPanoTab}
-              onToggleRoads={() => setRoadDetailsVisible((prev) => !prev)}
-              onToggleMapTilt={() => toggleMapTiltRef.current?.()}
-              onExitShop={() => exitShopRef.current?.()}
-              onCloseSelectedItem={() => setSelectedItemType(null)}
-              onToggleEditPin={() => setEditPinMode((prev) => !prev)}
-              onResetPin={handleResetPin}
-              onToggleInfo={() => setInfoOpen((prev) => !prev)}
-              onToggleDock={() => setDockCollapsed((prev) => !prev)}
-              onItemWhatsApp={handleOpenWhatsAppTopic}
-              onAddCatalogProduct={(product) => handleAddToCart(product)}
-              onExitToContact={() => handleNavigate('about', 'contact')}
-            />
+              <ShopHud
+                viewMode={viewMode}
+                panoTab={panoTab}
+                roadDetailsVisible={roadDetailsVisible}
+                editPinMode={editPinMode}
+                isDefaultPin={isDefaultPin}
+                infoOpen={infoOpen}
+                dockCollapsed={dockCollapsed}
+                shutterOpen={shutterOpen}
+                isMap3D={isMap3D}
+                insideShop={insideShop}
+                hoveredItemType={hoveredItemType}
+                selectedItemType={selectedItemType}
+                overlayDomRef={overlayDomRef}
+                onModeChange={handleModeChange}
+                onPanoTabChange={setPanoTab}
+                onToggleRoads={() => setRoadDetailsVisible((prev) => !prev)}
+                onToggleMapTilt={() => toggleMapTiltRef.current?.()}
+                onExitShop={() => exitShopRef.current?.()}
+                onCloseSelectedItem={() => setSelectedItemType(null)}
+                onToggleEditPin={() => setEditPinMode((prev) => !prev)}
+                onResetPin={handleResetPin}
+                onToggleInfo={() => setInfoOpen((prev) => !prev)}
+                onToggleDock={() => setDockCollapsed((prev) => !prev)}
+                onItemWhatsApp={handleOpenWhatsAppTopic}
+                onAddCatalogProduct={(product) => handleAddToCart(product)}
+                onExitToContact={() => handleNavigate('about', 'contact')}
+              />
 
-            <ShopInfoDrawer
-              open={infoOpen}
-              onClose={() => setInfoOpen(false)}
-              onOpenPano={() => handleModeChange('pano')}
-            />
-          </div>
+              <ShopInfoDrawer
+                open={infoOpen}
+                onClose={() => setInfoOpen(false)}
+                onOpenPano={() => handleModeChange('pano')}
+              />
+            </div>
+          </Suspense>
         )}
       </main>
 
       {activePage !== 'virtual-shop' && (
         <SiteFooter
+          socialLinks={socialLinks}
           onNavigate={handleNavigate}
           onBrowseCategory={handleBrowseCategory}
           onToggleAdmin={handleToggleAdmin}
@@ -505,12 +572,14 @@ export default function App() {
         onOpenVirtualShop={handleOpenVirtualShop}
       />
 
+      <FloatingWhatsAppButton hidden={activePage === 'virtual-shop'} />
+
       {showBackToTop && (
         <button
           type="button"
           onClick={scrollToTop}
           aria-label="Back to top"
-          className="fixed bottom-24 right-4 md:bottom-8 md:right-8 z-40 grid h-11 w-11 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-[#d44212] hover:shadow-xl active:scale-95 animate-fadeIn"
+          className="fixed right-4 bottom-[148px] z-40 grid h-11 w-11 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-[#d44212] hover:shadow-xl active:scale-95 md:right-6 md:bottom-[86px]"
         >
           <ArrowUp className="h-5 w-5" aria-hidden="true" />
         </button>

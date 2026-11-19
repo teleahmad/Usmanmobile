@@ -9,6 +9,7 @@ import {
   Store,
 } from 'lucide-react';
 import { SHOP_CONFIG, ViewMode } from '../config/shopConfig';
+import { useLanguage } from '../context/LanguageContext';
 import {
   CATALOG_PRODUCTS,
   CatalogProduct,
@@ -18,10 +19,13 @@ import {
   SITE_IMAGES,
   SitePage,
 } from '../data/catalogData';
+import { LiveCustomerReview } from '../hooks/useLiveStoreData';
+import { CustomerReviewsSection } from './CustomerReviewsSection';
 import { ResilientImage } from './ResilientImage';
 
 interface HomePageProps {
   products?: CatalogProduct[];
+  liveReviews?: LiveCustomerReview[];
   siteImages?: Record<keyof typeof SITE_IMAGES, string>;
   onNavigate: (page: SitePage, sectionHash?: string) => void;
   onBrowseCategory: (category: ProductCategory) => void;
@@ -32,6 +36,7 @@ interface HomePageProps {
 
 export const HomePage: React.FC<HomePageProps> = ({
   products = CATALOG_PRODUCTS,
+  liveReviews = [],
   siteImages = SITE_IMAGES,
   onNavigate,
   onBrowseCategory,
@@ -39,11 +44,21 @@ export const HomePage: React.FC<HomePageProps> = ({
   onInspectProduct,
   onQuickAddToCart,
 }) => {
+  const { t, isUrdu } = useLanguage();
   const [addedId, setAddedId] = useState<string | null>(null);
   const [trendingOffset, setTrendingOffset] = useState(0);
   const [featuredOffset, setFeaturedOffset] = useState(0);
   const [arrivalOffset, setArrivalOffset] = useState(4);
-  const [showReviews, setShowReviews] = useState(false);
+
+  const totalReviewCount = liveReviews.length + CUSTOMER_REVIEWS.length;
+  const averageRating =
+    totalReviewCount > 0
+      ? (
+          (liveReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) +
+            CUSTOMER_REVIEWS.length * 5) /
+          totalReviewCount
+        ).toFixed(1)
+      : '4.9';
 
   const catalogList = products.length > 0 ? products : CATALOG_PRODUCTS;
 
@@ -165,9 +180,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                 Usman Mobile Repairing Centre · Hussain Khan Wala, Chak No. 8, Pattoki
               </p>
 
-              <h1 className="font-display mt-3 text-[clamp(2.4rem,4.5vw,3.8rem)] font-extrabold leading-[1.06] tracking-tight text-[#141414] text-balance">
-                Elevate Your{' '}
-                <span className="text-[#EA4E1B]">Mobile</span> Experience
+              <h1
+                className={`font-display mt-3 text-[clamp(2.4rem,4.5vw,3.8rem)] font-extrabold leading-[1.08] tracking-tight text-[#141414] text-balance ${
+                  isUrdu ? 'font-urdu leading-[1.28]' : ''
+                }`}
+              >
+                {t('Elevate Your', 'اپنے موبائل کا')}{' '}
+                <span className="text-[#EA4E1B]">{t('Mobile', 'بہترین')}</span>{' '}
+                {t('Experience', 'تجربہ پائیں')}
               </h1>
 
               <p
@@ -177,18 +197,27 @@ export const HomePage: React.FC<HomePageProps> = ({
                 {SHOP_CONFIG.URDU_NAME}
               </p>
 
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-neutral-600 sm:text-base" style={{ fontFamily: 'Times New Roman' }}>
-                Tested chargers, AirPods, covers &amp; same-day phone repair — plus
-                Easypaisa, JazzCash &amp; interactive 3D shop walkthrough.
+              <p
+                className={`mt-4 max-w-md text-sm leading-relaxed text-neutral-600 sm:text-base ${
+                  isUrdu ? 'font-urdu' : ''
+                }`}
+                style={{ fontFamily: isUrdu ? undefined : 'Times New Roman' }}
+              >
+                {t(
+                  'Tested chargers, AirPods, covers, used phones & same-day phone repair — plus Easypaisa, JazzCash & interactive 3D shop walkthrough.',
+                  'چیک شدہ چارجرز، ایئرپوڈز، کورز، استعمال شدہ فونز اور ایک ہی دن میں موبائل ریپئرنگ — ساتھ ایزی پیسہ، جاز کیش اور تھری ڈی شاپ وزٹ۔',
+                )}
               </p>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => onBrowseCategory('All')}
-                  className="inline-flex h-11 shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full bg-[#EA4E1B] pr-2 pl-6 text-sm font-semibold text-white transition-colors hover:bg-[#d44212]"
+                  className={`inline-flex h-11 shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full bg-[#EA4E1B] pr-2 pl-6 text-sm font-semibold text-white transition-colors hover:bg-[#d44212] ${
+                    isUrdu ? 'font-urdu' : ''
+                  }`}
                 >
-                  <span>Shop Now</span>
+                  <span>{t('Shop Now', 'خریداری کریں')}</span>
                   <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                   </span>
@@ -197,10 +226,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenVirtualShop('shop')}
-                  className="inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-neutral-800/20 bg-white px-5 text-sm font-semibold text-[#141414] transition-colors hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+                  className={`inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-neutral-800/20 bg-white px-5 text-sm font-semibold text-[#141414] transition-colors hover:border-[#EA4E1B] hover:text-[#EA4E1B] ${
+                    isUrdu ? 'font-urdu' : ''
+                  }`}
                 >
                   <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Visit 3D Shop
+                  {t('Visit 3D Shop', 'تھری ڈی شاپ دیکھیں')}
                 </button>
               </div>
             </div>
@@ -211,6 +242,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <ResilientImage
                   src={siteImages.heroLifestyle}
                   alt="Customer enjoying wireless audio headphones and smartphone from Usman Mobile"
+                  priority
                   className="aspect-[4/3] w-full object-cover object-top"
                 />
                 {/* Soft left feathered blur + blend into sand canvas */}
@@ -218,9 +250,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#F3ECE6] via-[#F3ECE6]/55 to-transparent" />
               </div>
 
-              {/* Compact Floating Social Proof Card */}
-              <div className="absolute bottom-5 left-2 rounded-2xl border border-black/5 bg-white px-4 py-3 shadow-lg sm:left-6">
-                <p className="text-[11px] font-bold text-[#141414]">Our Reviews</p>
+              {/* Compact Floating Social Proof Card (jumps to live reviews) */}
+              <button
+                type="button"
+                onClick={() =>
+                  document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth' })
+                }
+                className="absolute bottom-5 left-2 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left shadow-lg transition hover:-translate-y-0.5 sm:left-6"
+              >
+                <p className={`text-[11px] font-bold text-[#141414] ${isUrdu ? 'font-urdu' : ''}`}>
+                  {t('Our Reviews', 'کسٹمر ریویوز')}
+                </p>
                 <div className="mt-1.5 flex items-center gap-2">
                   <div className="flex -space-x-2">
                     {['MB', 'TM', 'SR'].map((initials) => (
@@ -233,10 +273,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                     ))}
                   </div>
                   <span className="text-xs font-extrabold tabular-nums text-[#141414]">
-                    4.9 ★ · 500+
+                    {averageRating} ★ · {totalReviewCount}+
                   </span>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -580,87 +620,8 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 6. Our Clients Reviews (Toggleable / Collapsible behind Show Reviews Button) */}
-      <section className="mx-auto max-w-[1000px] px-4 py-8 sm:px-6 lg:px-8">
-        {!showReviews ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-black/5 bg-white p-6 text-center shadow-xs transition-all duration-300">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#EA4E1B]/10 text-[#EA4E1B] mb-2">
-              <Star className="h-5 w-5 fill-current" />
-            </div>
-            <h3 className="font-display text-base font-bold text-[#141414]">
-              Want to see what our customers say?
-            </h3>
-            <p className="mt-1 text-[11px] text-neutral-500 max-w-xs">
-              Read verified reviews from customers in Hussain Khan Wala and Pattoki.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowReviews(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#EA4E1B] px-4 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-[#d44212] hover:shadow-md"
-            >
-              <Star className="h-3.5 w-3.5 fill-current" />
-              <span>Show Client Reviews ({CUSTOMER_REVIEWS.length})</span>
-            </button>
-          </div>
-        ) : (
-          <div className="transition-all duration-300 ease-out transform opacity-100 scale-100">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="font-display text-xl font-extrabold tracking-tight text-[#141414] sm:text-2xl">
-                Our Clients <span className="text-[#EA4E1B]">Reviews</span>
-              </h2>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('about')}
-                  className="text-xs font-bold text-[#EA4E1B] hover:underline"
-                >
-                  See Gallery →
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowReviews(false)}
-                  className="rounded-xl border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-600 transition hover:bg-neutral-100"
-                >
-                  Hide
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              {CUSTOMER_REVIEWS.map((review) => {
-                const initials = review.name
-                  .split(' ')
-                  .map((w) => w[0])
-                  .join('')
-                  .slice(0, 2);
-                return (
-                  <blockquote
-                    key={review.id}
-                    className="flex flex-col justify-between rounded-xl border border-black/5 bg-white p-4 shadow-xs transition-all duration-300 hover:shadow-md hover:-translate-y-0.5"
-                  >
-                    <p className="text-[11px] leading-relaxed text-neutral-600">
-                      “{review.quote}”
-                    </p>
-                    <footer className="mt-3 flex items-center gap-2.5">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#F3ECE6] text-[11px] font-extrabold text-[#EA4E1B]">
-                        {initials}
-                      </span>
-                      <div className="leading-tight">
-                        <div className="text-xs font-bold text-[#141414]">
-                          {review.name}
-                        </div>
-                        <div className="mt-0.5 text-[10px] text-neutral-500">
-                          {review.service} · {review.location}
-                        </div>
-                      </div>
-                    </footer>
-                  </blockquote>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </section>
+      {/* 6. Real Customer Reviews & Ratings (with 4-digit privacy & self-edit) */}
+      <CustomerReviewsSection liveReviews={liveReviews} compact />
     </div>
   );
 };
