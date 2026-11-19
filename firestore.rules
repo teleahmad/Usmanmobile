@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Zero-Trust Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        (request.auth.token.email == 'teleahmad768@gmail.com' ||
+         exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.pricePkr is number && data.pricePkr >= 0 &&
+             data.inStock is bool;
+    }
+
+    function isValidRepair(data) {
+      return data.token is string && data.token.size() > 0 && data.token.size() <= 30 &&
+             data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
+             data.customerPhone is string && data.customerPhone.size() > 0 && data.customerPhone.size() <= 30 &&
+             data.deviceModel is string && data.deviceModel.size() > 0 && data.deviceModel.size() <= 100 &&
+             data.issue is string && data.issue.size() <= 300 &&
+             data.status in ['received', 'in_progress', 'ready', 'delivered'];
+    }
+
+    function isValidOrder(data) {
+      return data.orderNumber is string && data.orderNumber.size() > 0 && data.orderNumber.size() <= 30 &&
+             data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
+             data.customerPhone is string && data.customerPhone.size() > 0 && data.customerPhone.size() <= 30 &&
+             data.totalPkr is number && data.totalPkr >= 0 &&
+             data.status in ['new', 'confirmed', 'dispatched', 'completed', 'cancelled'];
+    }
+
+    // 1. Catalog Products (Public read for customers, admin-only write)
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isValidId(productId) && isBootstrappedAdmin() && isValidProduct(incoming());
+      allow update: if isValidId(productId) && isBootstrappedAdmin() && isValidProduct(incoming());
+      allow delete: if isValidId(productId) && isBootstrappedAdmin();
+    }
+
+    // 2. Repair Tickets (Public read for tracking repair by token, admin-only manage)
+    match /repairs/{repairId} {
+      allow read: if true;
+      allow create: if isValidId(repairId) && isBootstrappedAdmin() && isValidRepair(incoming());
+      allow update: if isValidId(repairId) && isBootstrappedAdmin() && isValidRepair(incoming());
+      allow delete: if isValidId(repairId) && isBootstrappedAdmin();
+    }
+
+    // 3. Customer Orders (Public creation on checkout, admin-only manage)
+    match /orders/{orderId} {
+      allow create: if isValidId(orderId) && isValidOrder(incoming());
+      allow read: if isBootstrappedAdmin();
+      allow update: if isValidId(orderId) && isBootstrappedAdmin() && isValidOrder(incoming());
+      allow delete: if isValidId(orderId) && isBootstrappedAdmin();
+    }
+
+    // 4. Admin Whitelist
+    match /admins/{adminId} {
+      allow read: if isBootstrappedAdmin() && isValidId(adminId);
+      allow write: if isBootstrappedAdmin() && isValidId(adminId);
+    }
+  }
+}

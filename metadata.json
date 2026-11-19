@@ -1,0 +1,6 @@
+{
+  "name": "Usman Mobile Repairing Centre",
+  "description": "Interactive 3D bazaar map, detailed storefront and repair workshop walkthrough, and 360° interior viewer for Usman Mobile Repairing Centre in Hussain Khan Wala, Pattoki.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

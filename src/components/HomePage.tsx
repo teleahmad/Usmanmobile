@@ -1,0 +1,655 @@
+import React, { useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  Compass,
+  Star,
+  Store,
+} from 'lucide-react';
+import { SHOP_CONFIG, ViewMode } from '../config/shopConfig';
+import {
+  CATALOG_PRODUCTS,
+  CatalogProduct,
+  CUSTOMER_REVIEWS,
+  formatPkr,
+  ProductCategory,
+  SITE_IMAGES,
+  SitePage,
+} from '../data/catalogData';
+import { ResilientImage } from './ResilientImage';
+
+interface HomePageProps {
+  onNavigate: (page: SitePage, sectionHash?: string) => void;
+  onBrowseCategory: (category: ProductCategory) => void;
+  onOpenVirtualShop: (initialMode: ViewMode) => void;
+  onInspectProduct: (product: CatalogProduct) => void;
+  onQuickAddToCart: (product: CatalogProduct) => void;
+}
+
+export const HomePage: React.FC<HomePageProps> = ({
+  onNavigate,
+  onBrowseCategory,
+  onOpenVirtualShop,
+  onInspectProduct,
+  onQuickAddToCart,
+}) => {
+  const [addedId, setAddedId] = useState<string | null>(null);
+  const [trendingOffset, setTrendingOffset] = useState(0);
+  const [featuredOffset, setFeaturedOffset] = useState(0);
+  const [arrivalOffset, setArrivalOffset] = useState(4);
+  const [showReviews, setShowReviews] = useState(false);
+
+  const handleQuickAdd = (e: React.MouseEvent, product: CatalogProduct) => {
+    e.stopPropagation();
+    onQuickAddToCart(product);
+    setAddedId(product.id);
+    window.setTimeout(() => {
+      setAddedId((prev) => (prev === product.id ? null : prev));
+    }, 1100);
+  };
+
+  const getSlice = (offset: number, count: number): CatalogProduct[] => {
+    const result: CatalogProduct[] = [];
+    for (let i = 0; i < count; i++) {
+      result.push(CATALOG_PRODUCTS[(offset + i) % CATALOG_PRODUCTS.length]);
+    }
+    return result;
+  };
+
+  const trendingItems = getSlice(trendingOffset, 3);
+  const featuredItems = getSlice(featuredOffset, 4);
+  const arrivalItems = getSlice(arrivalOffset, 4);
+
+  const renderProductCard = (
+    product: CatalogProduct,
+    highlighted = false,
+  ) => {
+    const isAdded = addedId === product.id;
+    const discount = product.discountPercent ?? 25;
+    const original = product.originalPricePkr ?? Math.round(product.pricePkr * 1.35);
+    const reviews = product.reviewsCount ?? 450;
+    const sold = product.soldCount ?? '2.5K sold';
+
+    return (
+      <article
+        key={product.id}
+        onClick={() => onInspectProduct(product)}
+        className={`group flex cursor-pointer flex-col overflow-hidden rounded-xl bg-white transition-all duration-150 hover:-translate-y-0.5 hover:border-[#EA4E1B] hover:shadow-md sm:rounded-2xl ${
+          highlighted
+            ? 'border border-[#EA4E1B]/70 shadow-xs'
+            : 'border border-black/5 shadow-xs'
+        }`}
+      >
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4] sm:aspect-square">
+          <ResilientImage
+            src={product.image}
+            alt={product.name}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+          />
+        </div>
+
+        <div className="flex flex-1 flex-col justify-between p-2.5 sm:p-3.5">
+          <div>
+            <h3 className="line-clamp-2 text-xs font-semibold leading-snug text-[#141414] group-hover:text-[#EA4E1B] sm:text-sm">
+              {product.name}
+            </h3>
+
+            <div className="mt-1 flex flex-wrap items-baseline gap-1">
+              <span className="font-display text-sm font-extrabold tabular-nums text-[#EA4E1B] sm:text-base">
+                {formatPkr(product.pricePkr)}
+              </span>
+              <span className="rounded-xs bg-orange-50 px-1 py-0.5 text-[9px] font-bold text-[#EA4E1B] sm:text-[10px]">
+                -{discount}%
+              </span>
+            </div>
+
+            <div className="text-[9px] text-neutral-400 line-through tabular-nums sm:text-[11px]">
+              {formatPkr(original)}
+            </div>
+
+            <div className="mt-1 flex items-center gap-0.5 text-[9px] text-neutral-500 sm:mt-1.5 sm:gap-1 sm:text-[11px]">
+              <Star
+                className="h-2.5 w-2.5 shrink-0 fill-amber-400 text-amber-400 sm:h-3 sm:w-3"
+                aria-hidden="true"
+              />
+              <span className="font-bold text-neutral-700">{product.rating}</span>
+              <span className="text-neutral-400">({reviews})</span>
+              <span className="text-neutral-300">|</span>
+              <span className="truncate font-medium text-neutral-600">{sold}</span>
+            </div>
+          </div>
+
+          <div className="mt-2.5 hidden border-t border-black/5 pt-2 sm:block">
+            <button
+              type="button"
+              onClick={(e) => handleQuickAdd(e, product)}
+              className={`inline-flex h-8 w-full items-center justify-center gap-1 whitespace-nowrap rounded-full px-3 text-[11px] font-bold text-white transition-colors ${
+                isAdded
+                  ? 'bg-[#16A34A]'
+                  : 'bg-[#EA4E1B] hover:bg-[#d44212]'
+              }`}
+            >
+              {isAdded ? (
+                <>
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                  Added
+                </>
+              ) : (
+                'Add To Cart'
+              )}
+            </button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  return (
+    <div className="bg-[#F3ECE6] text-[#141414]">
+      {/* 1. Warm Sand Editorial Hero Section */}
+      <section className="overflow-hidden bg-[#F3ECE6]">
+        <div className="mx-auto max-w-[1200px] px-4 pt-8 pb-0 sm:px-6 lg:px-8 lg:pt-10">
+          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
+            {/* Left Copy */}
+            <div className="pb-10 lg:col-span-6 lg:pb-16">
+              <p className="text-xs font-semibold text-neutral-600" style={{ fontFamily: 'Georgia' }}>
+                Usman Mobile Repairing Centre · Hussain Khan Wala, Chak No. 8, Pattoki
+              </p>
+
+              <h1 className="font-display mt-3 text-[clamp(2.4rem,4.5vw,3.8rem)] font-extrabold leading-[1.06] tracking-tight text-[#141414] text-balance">
+                Elevate Your{' '}
+                <span className="text-[#EA4E1B]">Mobile</span> Experience
+              </h1>
+
+              <p
+                className="font-urdu mt-2.5 text-lg font-medium text-neutral-700 lg:text-left"
+                style={{ textAlign: 'left' }}
+              >
+                {SHOP_CONFIG.URDU_NAME}
+              </p>
+
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-neutral-600 sm:text-base" style={{ fontFamily: 'Times New Roman' }}>
+                Tested chargers, AirPods, covers &amp; same-day phone repair — plus
+                Easypaisa, JazzCash &amp; interactive 3D shop walkthrough.
+              </p>
+
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => onBrowseCategory('All')}
+                  className="inline-flex h-11 shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full bg-[#EA4E1B] pr-2 pl-6 text-sm font-semibold text-white transition-colors hover:bg-[#d44212]"
+                >
+                  <span>Shop Now</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onOpenVirtualShop('shop')}
+                  className="inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-neutral-800/20 bg-white px-5 text-sm font-semibold text-[#141414] transition-colors hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+                >
+                  <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Visit 3D Shop
+                </button>
+              </div>
+            </div>
+
+            {/* Right Editorial Lifestyle Portrait + Floating Local Proof Card */}
+            <div className="relative flex items-end justify-center lg:col-span-6 lg:justify-end">
+              <div className="relative w-full max-w-[520px] overflow-hidden rounded-t-3xl bg-[#ECD8BE]">
+                <ResilientImage
+                  src={SITE_IMAGES.heroLifestyle}
+                  alt="Customer enjoying wireless audio headphones and smartphone from Usman Mobile"
+                  className="aspect-[4/3] w-full object-cover object-top"
+                />
+                {/* Soft left/bottom blend into sand canvas */}
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#F3ECE6] to-transparent" />
+              </div>
+
+              {/* Compact Floating Social Proof Card */}
+              <div className="absolute bottom-5 left-2 rounded-2xl border border-black/5 bg-white px-4 py-3 shadow-lg sm:left-6">
+                <p className="text-[11px] font-bold text-[#141414]">Our Reviews</p>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <div className="flex -space-x-2">
+                    {['MB', 'TM', 'SR'].map((initials) => (
+                      <span
+                        key={initials}
+                        className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#141414] text-[10px] font-bold text-white"
+                      >
+                        {initials}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-xs font-extrabold tabular-nums text-[#141414]">
+                    4.9 ★ · 500+
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. Pure White Strip: Our Trending Products (Orange Left Block + 3 Product Cards) */}
+      <section className="bg-white py-14 lg:py-16">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
+          <div className="mb-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setTrendingOffset(
+                  (prev) => (prev - 1 + CATALOG_PRODUCTS.length) % CATALOG_PRODUCTS.length,
+                )
+              }
+              aria-label="Previous trending products"
+              className="grid h-9 w-9 place-items-center rounded-full border border-[#EA4E1B]/50 text-[#EA4E1B] transition-colors hover:bg-[#EA4E1B] hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setTrendingOffset((prev) => (prev + 1) % CATALOG_PRODUCTS.length)
+              }
+              aria-label="Next trending products"
+              className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
+            >
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-5 md:grid-cols-2 lg:grid-cols-4">
+            {/* Signature Solid Burnt-Orange Anchor Card */}
+            <button
+              type="button"
+              onClick={() => onBrowseCategory('All')}
+              className="group col-span-2 flex min-h-[160px] flex-col justify-between rounded-2xl bg-[#EA4E1B] p-5 text-left text-white transition-colors hover:bg-[#d44212] sm:col-span-1 sm:min-h-[290px] sm:p-6"
+            >
+              <div>
+                <h2 className="font-display text-2xl font-extrabold leading-tight sm:text-[28px]">
+                  Our Trending Products
+                </h2>
+                <p className="mt-3 text-xs leading-relaxed text-white/85">
+                  Live-tested fast chargers, handsfree, AirPods &amp; covers stocked
+                  daily at our Main Bazar counter.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-6">
+                <span className="text-xs font-semibold text-white/90">
+                  View full store
+                </span>
+                <ArrowUpRight
+                  className="h-6 w-6 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </button>
+
+            {trendingItems.map((product, idx) =>
+              renderProductCard(product, idx === 0),
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Shop Product by Category (Signature Editorial Bento Showcase on Warm Sand) */}
+      <section className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between gap-4">
+          <h2 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-[#141414] sm:text-4xl">
+            Shop Product by
+            <br />
+            <span className="text-[#EA4E1B]">Category</span>
+          </h2>
+
+          <button
+            type="button"
+            onClick={() => onBrowseCategory('All')}
+            className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-[#EA4E1B] px-6 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
+          >
+            View All
+          </button>
+        </div>
+
+        <div className="mt-8 space-y-5">
+          {/* Row 1: Full-Width White Showcase — Cases & 9D Glass */}
+          <div className="grid grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:p-10 md:grid-cols-12">
+            <div className="md:col-span-5">
+              <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414] sm:text-3xl">
+                Premium MagSafe &amp; Phone Cases Collection
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-neutral-500">
+                Shockproof armor covers &amp; 9D tempered glass fitted dust-free for
+                Infinix, Tecno, Samsung, Vivo, Oppo &amp; iPhone.
+              </p>
+              <button
+                type="button"
+                onClick={() => onBrowseCategory('Protection')}
+                className="mt-6 inline-flex h-10 items-center gap-2 rounded-full bg-[#EA4E1B] pr-1.5 pl-5 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
+              >
+                <span>Shop Now</span>
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </button>
+            </div>
+            <div className="md:col-span-7">
+              <div className="aspect-[16/9] w-full overflow-hidden rounded-xl bg-white">
+                <ResilientImage
+                  src={SITE_IMAGES.bentoCasesTrio}
+                  alt="Three MagSafe smartphone protective cases in black, white, and cream"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Two-Column Split — AirPods & Smart Watches */}
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="grid grid-cols-1 items-center gap-4 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:grid-cols-12 sm:p-8">
+              <div className="sm:col-span-6">
+                <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414]">
+                  Awesome
+                  <br />
+                  AirPods &amp; Buds
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => onBrowseCategory('Audio')}
+                  className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-[#EA4E1B] pr-1.5 pl-5 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
+                >
+                  <span>Shop Now</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </button>
+              </div>
+              <div className="sm:col-span-6">
+                <div className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                  <ResilientImage
+                    src={SITE_IMAGES.bentoAirpods}
+                    alt="AirPods Pro wireless earbuds and stereo handsfree"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 items-center gap-4 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:grid-cols-12 sm:p-8">
+              <div className="sm:col-span-6">
+                <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414]">
+                  Smart Watches
+                  <br />
+                  &amp; PTA Phones
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => onBrowseCategory('Phones & Wearables')}
+                  className="mt-5 inline-flex h-10 items-center gap-2 rounded-full bg-[#EA4E1B] pr-1.5 pl-5 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
+                >
+                  <span>Shop Now</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </button>
+              </div>
+              <div className="sm:col-span-6">
+                <div className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                  <ResilientImage
+                    src={SITE_IMAGES.bentoSmartwatch}
+                    alt="Ultra calling smartwatch and modern PTA smartphone"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: Full-Width White Showcase — Premium Audio Collection */}
+          <div className="grid grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:p-10 md:grid-cols-12">
+            <div className="md:col-span-5">
+              <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414] sm:text-3xl">
+                Premium Audio &amp; Headphone Collection
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-neutral-500">
+                Ronin R-9 wired handsfree, Bluetooth speakers, and wireless earbuds —
+                sound-tested right at our counter before you pay.
+              </p>
+              <button
+                type="button"
+                onClick={() => onBrowseCategory('Audio')}
+                className="mt-6 inline-flex h-10 items-center gap-2 rounded-full bg-[#EA4E1B] pr-1.5 pl-5 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
+              >
+                <span>Shop Now</span>
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </button>
+            </div>
+            <div className="md:col-span-7">
+              <div className="aspect-[16/9] w-full overflow-hidden rounded-xl bg-white">
+                <ResilientImage
+                  src={SITE_IMAGES.bentoAudioCollection}
+                  alt="Wireless headphones and earbuds collection"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Row 4: Full-Width White Showcase — 3D Virtual Shop, Map & Repair Lab */}
+          <div className="grid grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:p-10 md:grid-cols-12">
+            <div className="md:col-span-6">
+              <p className="text-xs font-bold text-[#EA4E1B]">
+                Hussain Khan Wala · Main Bazar
+              </p>
+              <h3 className="font-display mt-1.5 text-2xl font-extrabold leading-tight text-[#141414] sm:text-3xl">
+                Walk Inside Our 3D Shop &amp; Repair Lab
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-neutral-500">
+                Explore our interactive village map, zoom straight inside Usman Mobile
+                in 360°, or book same-day LCD, charging IC, and software repairs.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenVirtualShop('shop')}
+                  className="inline-flex h-10 items-center gap-2 rounded-full bg-[#EA4E1B] pr-1.5 pl-5 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
+                >
+                  <span>Open 3D Shop</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
+                    <Store className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenVirtualShop('map')}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-4 text-xs font-semibold text-[#141414] transition-colors hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+                >
+                  <Compass className="h-3.5 w-3.5" aria-hidden="true" />
+                  Village Map
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('repairs')}
+                  className="inline-flex h-10 items-center rounded-full bg-[#141414] px-4 text-xs font-semibold text-white transition-colors hover:bg-neutral-800"
+                >
+                  Repair Rates
+                </button>
+              </div>
+            </div>
+            <div className="md:col-span-6">
+              <div className="aspect-[16/10] w-full overflow-hidden rounded-xl bg-neutral-100">
+                <ResilientImage
+                  src={SITE_IMAGES.realInteriorCounter}
+                  alt="Real interior view of Usman Mobile Repairing Centre counter and accessories wall"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Featured Products (4-Column Carousel Grid on Warm Sand) */}
+      <section className="mx-auto max-w-[1200px] px-4 py-10 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-display text-2xl font-extrabold tracking-tight text-[#141414] sm:text-3xl">
+            Featured <span className="text-[#EA4E1B]">Products</span>
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setFeaturedOffset(
+                  (prev) => (prev - 1 + CATALOG_PRODUCTS.length) % CATALOG_PRODUCTS.length,
+                )
+              }
+              aria-label="Previous featured products"
+              className="grid h-9 w-9 place-items-center rounded-full border border-[#EA4E1B]/50 bg-white text-[#EA4E1B] transition-colors hover:bg-[#EA4E1B] hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setFeaturedOffset((prev) => (prev + 1) % CATALOG_PRODUCTS.length)
+              }
+              aria-label="Next featured products"
+              className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
+            >
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+          {featuredItems.map((product) => renderProductCard(product))}
+        </div>
+      </section>
+
+      {/* 5. New Arrival (4-Column Carousel Grid on Warm Sand) */}
+      <section className="mx-auto max-w-[1200px] px-4 py-10 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-display text-2xl font-extrabold tracking-tight text-[#141414] sm:text-3xl">
+            New <span className="text-[#EA4E1B]">Arrival</span>
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setArrivalOffset(
+                  (prev) => (prev - 1 + CATALOG_PRODUCTS.length) % CATALOG_PRODUCTS.length,
+                )
+              }
+              aria-label="Previous new arrivals"
+              className="grid h-9 w-9 place-items-center rounded-full border border-[#EA4E1B]/50 bg-white text-[#EA4E1B] transition-colors hover:bg-[#EA4E1B] hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setArrivalOffset((prev) => (prev + 1) % CATALOG_PRODUCTS.length)
+              }
+              aria-label="Next new arrivals"
+              className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
+            >
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+          {arrivalItems.map((product) => renderProductCard(product))}
+        </div>
+      </section>
+
+      {/* 6. Our Clients Reviews (Toggleable / Collapsible behind Show Reviews Button) */}
+      <section className="mx-auto max-w-[1000px] px-4 py-8 sm:px-6 lg:px-8">
+        {!showReviews ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-black/5 bg-white p-6 text-center shadow-xs transition-all duration-300">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#EA4E1B]/10 text-[#EA4E1B] mb-2">
+              <Star className="h-5 w-5 fill-current" />
+            </div>
+            <h3 className="font-display text-base font-bold text-[#141414]">
+              Want to see what our customers say?
+            </h3>
+            <p className="mt-1 text-[11px] text-neutral-500 max-w-xs">
+              Read verified reviews from customers in Hussain Khan Wala and Pattoki.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowReviews(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#EA4E1B] px-4 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-[#d44212] hover:shadow-md"
+            >
+              <Star className="h-3.5 w-3.5 fill-current" />
+              <span>Show Client Reviews ({CUSTOMER_REVIEWS.length})</span>
+            </button>
+          </div>
+        ) : (
+          <div className="transition-all duration-300 ease-out transform opacity-100 scale-100">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="font-display text-xl font-extrabold tracking-tight text-[#141414] sm:text-2xl">
+                Our Clients <span className="text-[#EA4E1B]">Reviews</span>
+              </h2>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('about')}
+                  className="text-xs font-bold text-[#EA4E1B] hover:underline"
+                >
+                  See Gallery →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReviews(false)}
+                  className="rounded-xl border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-600 transition hover:bg-neutral-100"
+                >
+                  Hide
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+              {CUSTOMER_REVIEWS.map((review) => {
+                const initials = review.name
+                  .split(' ')
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2);
+                return (
+                  <blockquote
+                    key={review.id}
+                    className="flex flex-col justify-between rounded-xl border border-black/5 bg-white p-4 shadow-xs transition-all duration-300 hover:shadow-md hover:-translate-y-0.5"
+                  >
+                    <p className="text-[11px] leading-relaxed text-neutral-600">
+                      “{review.quote}”
+                    </p>
+                    <footer className="mt-3 flex items-center gap-2.5">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#F3ECE6] text-[11px] font-extrabold text-[#EA4E1B]">
+                        {initials}
+                      </span>
+                      <div className="leading-tight">
+                        <div className="text-xs font-bold text-[#141414]">
+                          {review.name}
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-neutral-500">
+                          {review.service} · {review.location}
+                        </div>
+                      </div>
+                    </footer>
+                  </blockquote>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+};
