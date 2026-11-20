@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Compass, Home, MessageCircle, ShoppingBag, Store } from 'lucide-react';
-import { getWhatsAppUrl } from '../config/shopConfig';
 import { useLanguage } from '../context/LanguageContext';
 import { SitePage } from '../data/catalogData';
 
 interface MobileBottomNavProps {
   activePage: SitePage;
   cartOpen?: boolean;
+  whatsAppOpen?: boolean;
   cartCount: number;
   onNavigate: (page: SitePage) => void;
   onOpenCart: () => void;
+  onOpenWhatsApp: () => void;
 }
 
 const TAB_COUNT = 5;
@@ -25,9 +26,11 @@ const TABS = [
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activePage,
   cartOpen = false,
+  whatsAppOpen = false,
   cartCount,
   onNavigate,
   onOpenCart,
+  onOpenWhatsApp,
 }) => {
   const { isUrdu } = useLanguage();
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -46,12 +49,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const activeIndex = useMemo<number>(() => {
+    if (whatsAppOpen) return 4;
     if (cartOpen) return 3;
     if (activePage === 'home') return 0;
     if (activePage === 'products') return 1;
     if (activePage === 'virtual-shop') return 2;
     return -1;
-  }, [activePage, cartOpen]);
+  }, [activePage, cartOpen, whatsAppOpen]);
 
   const applyLensTransform = useCallback((pos: number, vel: number, dragging: boolean) => {
     const lens = lensRef.current;
@@ -140,11 +144,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     } else if (index === 3) {
       onOpenCart();
     } else if (index === 4) {
-      const link = document.createElement('a');
-      link.href = getWhatsAppUrl('Assalam o Alaikum Usman Mobile');
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.click();
+      onOpenWhatsApp();
     }
   };
 

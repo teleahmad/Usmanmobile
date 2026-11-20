@@ -1,9 +1,21 @@
-import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Edit3, Lock, Search, Star, X } from 'lucide-react';
-import { doc, getDoc, writeBatch } from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  Edit3,
+  Eye,
+  EyeOff,
+  Lock,
+  Search,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { deleteDoc, doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
+import { useAdminAuth } from '../context/AdminAuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { CUSTOMER_REVIEWS } from '../data/catalogData';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { LiveCustomerReview } from '../hooks/useLiveStoreData';
 import {
   deriveReviewCredentials,
@@ -15,6 +27,8 @@ import {
 
 interface CustomerReviewsSectionProps {
   liveReviews: LiveCustomerReview[];
+  hiddenReviewIds?: string[];
+  reviewsVisible?: boolean;
   compact?: boolean;
 }
 
@@ -33,15 +47,30 @@ const STAR_LABELS_UR = ['', 'کمزور', 'مناسب', 'اچھا', 'بہت اچ
 
 export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
   liveReviews,
+  hiddenReviewIds = [],
+  reviewsVisible = true,
   compact = false,
 }) => {
   const { t, isUrdu } = useLanguage();
+  const { isAdmin } = useAdminAuth();
 
+  const [expanded, setExpanded] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editLookupMode, setEditLookupMode] = useState(false);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [existingCreatedAt, setExistingCreatedAt] = useState<string | null>(null);
   const [mySavedIds, setMySavedIds] = useState<string[]>(() => loadMySavedReviewIds());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
+
+  useEffect(() => {
+    const handleOpenReviews = () => {
+      setExpanded(true);
+    };
+    window.addEventListener('usman:open-reviews', handleOpenReviews);
+    return () => window.removeEventListener('usman:open-reviews', handleOpenReviews);
+  }, []);
 
   // Form fields
   const [customerName, setCustomerName] = useState('');
@@ -58,8 +87,72 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
     null,
   );
 
-  // Merge live Firestore reviews with verified baseline shop reviews
+  const handleAdminDeleteReview = async (review: LiveCustomerReview) => {
+    try {
+      setDeletingId(review.id);
+      if (review.isSeed) {
+        const nextHidden = Array.from(new Set([...hiddenReviewIds, review.id])).slice(0, 50);
+        await setDoc(
+          doc(db, 'siteSettings', 'hiddenReviews'),
+          {
+            hiddenIds: nextHidden,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      } else {
+        await deleteDoc(doc(db, 'reviews', review.id));
+        try {
+          await deleteDoc(doc(db, 'reviewKeys', review.id));
+        } catch {
+          // Key may already be removed
+        }
+      }
+      setConfirmDeleteId(null);
+    } catch (err) {
+      try {
+        handleFirestoreError(err, OperationType.DELETE, `reviews/${review.id}`);
+      } catch {
+        // logged
+      }
+      setStatusMsg({
+        text: 'Could not delete review from backend. Make sure you are signed in as admin.',
+        type: 'error',
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleToggleReviewsVisibility = async (nextVisible: boolean) => {
+    try {
+      setTogglingVisibility(true);
+      await setDoc(
+        doc(db, 'siteSettings', 'hiddenReviews'),
+        {
+          reviewsVisible: nextVisible,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      try {
+        handleFirestoreError(err, OperationType.WRITE, 'siteSettings/hiddenReviews');
+      } catch {
+        // logged
+      }
+      setStatusMsg({
+        text: 'Could not update reviews visibility in backend. Make sure you are signed in as admin.',
+        type: 'error',
+      });
+    } finally {
+      setTogglingVisibility(false);
+    }
+  };
+
+  // Merge live Firestore reviews with non-deleted baseline shop reviews
   const combinedReviews = useMemo(() => {
+    const hiddenSet = new Set(hiddenReviewIds);
     const baseline: LiveCustomerReview[] = CUSTOMER_REVIEWS.map((r, idx) => ({
       id: `seed-${r.id}`,
       customerName: r.name,
@@ -70,9 +163,9 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
       createdAt: '2026-10-01T10:00:00.000Z',
       updatedAt: '2026-10-01T10:00:00.000Z',
       isSeed: true,
-    }));
+    })).filter((item) => !hiddenSet.has(item.id));
     return [...liveReviews, ...baseline];
-  }, [liveReviews]);
+  }, [liveReviews, hiddenReviewIds]);
 
   const stats = useMemo(() => {
     const total = combinedReviews.length;
@@ -99,18 +192,21 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
   const openWriteForm = () => {
     resetForm();
     setStatusMsg(null);
+    setExpanded(true);
     setFormOpen(true);
   };
 
   const openEditLookup = () => {
     resetForm();
     setStatusMsg(null);
+    setExpanded(true);
     setEditLookupMode(true);
     setFormOpen(true);
   };
 
   const openEditForCard = (review: LiveCustomerReview) => {
     setStatusMsg(null);
+    setExpanded(true);
     setFormOpen(true);
     setEditLookupMode(false);
     setEditingReviewId(review.id);
@@ -325,98 +421,195 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
   const visibleReviews = compact ? combinedReviews.slice(0, 6) : combinedReviews;
   const previewMasked = isValidPhoneInput(phoneInput) ? maskPhoneLast4(phoneInput) : '••••••1234';
 
+  if (!reviewsVisible) {
+    if (!isAdmin) return null;
+    return (
+      <section
+        id="reviews"
+        className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6 lg:px-8"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dashed border-black/20 bg-white/80 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-neutral-100 text-neutral-600">
+              <EyeOff className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-[#141414]">
+                Customer Reviews &amp; Ratings is Hidden
+              </p>
+              <p className="text-xs text-neutral-500">
+                Regular visitors cannot see the Reviews section right now. Click Show Reviews to make it visible again.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={togglingVisibility}
+            onClick={() => void handleToggleReviewsVisibility(true)}
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#EA4E1B] px-5 text-xs font-bold text-white shadow-xs transition hover:bg-[#d44212] disabled:opacity-60"
+          >
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{togglingVisibility ? 'Saving...' : 'Show Reviews'}</span>
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       id="reviews"
-      className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 lg:px-8 lg:py-14"
+      className="mx-auto max-w-[1200px] px-4 py-10 sm:px-6 lg:px-8 lg:py-12"
     >
-      {/* Header + Rating Summary Bar */}
-      <div className="flex flex-col justify-between gap-4 border-b border-black/8 pb-6 sm:flex-row sm:items-end">
-        <div>
-          <p className={`text-xs font-bold text-[#EA4E1B] ${isUrdu ? 'font-urdu text-sm' : ''}`}>
-            {t('Verified Customer Feedback', 'تصدیق شدہ کسٹمر ریویوز')}
-          </p>
-          <h2
-            className={`font-display mt-1 text-2xl font-extrabold tracking-tight text-[#141414] sm:text-3xl ${
-              isUrdu ? 'font-urdu' : ''
-            }`}
-          >
-            {t('Customer', 'کسٹمرز کی')}{' '}
-            <span className="text-[#EA4E1B]">{t('Reviews & Ratings', 'رائے اور ریٹنگ')}</span>
-          </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-600">
-            <span className="inline-flex items-center gap-1 font-extrabold tabular-nums text-[#141414]">
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
-              {stats.average} / 5.0
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className="tabular-nums">
-              {stats.total} {t('reviews', 'ریویوز')}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span className={isUrdu ? 'font-urdu' : ''}>
-              {t('Phone privacy: last 4 digits only', 'پرائیویسی: نمبر کے صرف آخری 4 ہندسے')}
-            </span>
+      {/* Aesthetic Bottom Reviews Showcase Bar with Smooth Show/Hide Trigger */}
+      <div className="rounded-3xl border border-black/8 bg-white p-5 shadow-[0_6px_24px_rgba(20,20,20,0.05)] transition-all duration-300 sm:p-7">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
+          <div>
+            <p className={`text-xs font-bold text-[#EA4E1B] ${isUrdu ? 'font-urdu text-sm' : ''}`}>
+              {t('Verified Customer Feedback', 'تصدیق شدہ کسٹمر ریویوز')}
+            </p>
+            <h2
+              className={`font-display mt-1 text-2xl font-extrabold tracking-tight text-[#141414] sm:text-3xl ${
+                isUrdu ? 'font-urdu' : ''
+              }`}
+            >
+              {t('Customer', 'کسٹمرز کی')}{' '}
+              <span className="text-[#EA4E1B]">{t('Reviews & Ratings', 'رائے اور ریٹنگ')}</span>
+            </h2>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-xs text-neutral-600">
+              <div className="flex -space-x-2">
+                {['MB', 'TM', 'SR'].map((initials) => (
+                  <span
+                    key={initials}
+                    className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-[#141414] text-[9px] font-bold text-white"
+                  >
+                    {initials}
+                  </span>
+                ))}
+              </div>
+              <span className="inline-flex items-center gap-1 font-extrabold tabular-nums text-[#141414]">
+                <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                {stats.average} / 5.0
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="tabular-nums font-semibold text-neutral-700">
+                {stats.total} {t('reviews', 'ریویوز')}
+              </span>
+              <span aria-hidden="true" className="hidden sm:inline">·</span>
+              <span className={`hidden sm:inline ${isUrdu ? 'font-urdu' : ''}`}>
+                {t('Phone privacy: last 4 digits only', 'پرائیویسی: نمبر کے صرف آخری 4 ہندسے')}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Aesthetic Primary Show / Hide Reviews Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              aria-expanded={expanded}
+              aria-controls="customer-reviews-panel"
+              className={`group inline-flex h-11 shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-5 text-xs font-bold shadow-sm transition-all duration-300 active:scale-[0.98] ${
+                isUrdu ? 'font-urdu text-sm font-semibold' : ''
+              } ${
+                expanded
+                  ? 'border border-black/15 bg-[#FAF5F0] text-[#141414] hover:border-[#EA4E1B] hover:text-[#EA4E1B]'
+                  : 'bg-[#141414] text-white shadow-[0_8px_20px_rgba(20,20,20,0.18)] hover:-translate-y-0.5 hover:bg-[#EA4E1B] hover:shadow-[0_10px_24px_rgba(234,78,27,0.28)]'
+              }`}
+            >
+              <span
+                className={`grid h-6 w-6 place-items-center rounded-full transition-colors duration-300 ${
+                  expanded
+                    ? 'bg-[#EA4E1B]/12 text-[#EA4E1B]'
+                    : 'bg-white/15 text-amber-300 group-hover:bg-white/20 group-hover:text-white'
+                }`}
+              >
+                <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+              </span>
+              <span>
+                {expanded
+                  ? t('Hide Reviews', 'ریویوز چھپائیں')
+                  : t(`Show Reviews (${stats.total})`, `ریویوز دیکھیں (${stats.total})`)}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-300 ease-out ${
+                  expanded ? 'rotate-180' : 'rotate-0'
+                }`}
+                aria-hidden="true"
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={openWriteForm}
+              className={`inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#EA4E1B] px-5 text-xs font-bold text-white shadow-xs transition hover:-translate-y-0.5 hover:bg-[#d44212] ${
+                isUrdu ? 'font-urdu text-sm font-semibold' : ''
+              }`}
+            >
+              <Star className="h-3.5 w-3.5 fill-white" aria-hidden="true" />
+              <span>{t('Write a Review', 'ریویو لکھیں')}</span>
+            </button>
+
+            {expanded && (
+              <button
+                type="button"
+                onClick={openEditLookup}
+                className={`inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-4 text-xs font-semibold text-[#141414] transition hover:border-[#EA4E1B] hover:text-[#EA4E1B] ${
+                  isUrdu ? 'font-urdu text-sm' : ''
+                }`}
+              >
+                <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>{t('Edit My Review', 'اپنا ریویو بدلیں')}</span>
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={openWriteForm}
-            className={`inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#EA4E1B] px-5 text-xs font-bold text-white shadow-xs transition hover:bg-[#d44212] ${
-              isUrdu ? 'font-urdu text-sm font-semibold' : ''
-            }`}
-          >
-            <Star className="h-3.5 w-3.5 fill-white" aria-hidden="true" />
-            <span>{t('Write a Review', 'ریویو لکھیں')}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={openEditLookup}
-            className={`inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-4 text-xs font-semibold text-[#141414] transition hover:border-[#EA4E1B] hover:text-[#EA4E1B] ${
-              isUrdu ? 'font-urdu text-sm' : ''
-            }`}
-          >
-            <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{t('Edit My Review', 'اپنا ریویو بدلیں')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Feedback Banner */}
-      {statusMsg && (
+        {/* Smooth Animated Expandable Reviews Container */}
         <div
-          className={`mt-5 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-medium ${
-            statusMsg.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-              : 'border-red-200 bg-red-50 text-red-900'
-          } ${isUrdu ? 'font-urdu text-sm' : ''}`}
+          id="customer-reviews-panel"
+          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            expanded ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0'
+          }`}
         >
-          <span className="flex items-center gap-2">
-            {statusMsg.type === 'success' && (
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
-            )}
-            {statusMsg.text}
-          </span>
-          <button
-            type="button"
-            onClick={() => setStatusMsg(null)}
-            aria-label="Dismiss"
-            className="shrink-0 p-1 opacity-70 hover:opacity-100"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      )}
+          <div className="overflow-hidden">
+            <div
+              className={`pt-6 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                expanded ? 'translate-y-0' : '-translate-y-3'
+              }`}
+            >
+              {/* Feedback Banner */}
+              {statusMsg && (
+                <div
+                  className={`mb-5 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-medium ${
+                    statusMsg.type === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : 'border-red-200 bg-red-50 text-red-900'
+                  } ${isUrdu ? 'font-urdu text-sm' : ''}`}
+                >
+                  <span className="flex items-center gap-2">
+                    {statusMsg.type === 'success' && (
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                    )}
+                    {statusMsg.text}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setStatusMsg(null)}
+                    aria-label="Dismiss"
+                    className="shrink-0 p-1 opacity-70 hover:opacity-100"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              )}
 
-      {/* Write / Edit Review Form */}
-      {formOpen && (
-        <div
-          id="customer-review-form"
-          className="mt-6 rounded-2xl border border-black/10 bg-white p-5 shadow-sm sm:p-7"
-        >
+              {/* Write / Edit Review Form */}
+              {formOpen && (
+                <div
+                  id="customer-review-form"
+                  className="mb-6 rounded-2xl border border-black/10 bg-[#FAF8F6] p-5 shadow-xs sm:p-7"
+                >
           <div className="flex items-start justify-between gap-4 border-b border-black/5 pb-4">
             <div>
               <h3
@@ -626,7 +819,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
       )}
 
       {/* Live Reviews Grid */}
-      <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {visibleReviews.map((review) => {
           const initials = review.customerName
             .split(' ')
@@ -645,7 +838,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
           return (
             <article
               key={review.id}
-              className="flex flex-col justify-between rounded-2xl border border-black/6 bg-white p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              className="flex flex-col justify-between rounded-2xl border border-black/8 bg-[#FAF7F4] p-5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
             >
               <div>
                 <div className="flex items-center justify-between gap-2">
@@ -663,21 +856,54 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
                     ))}
                   </div>
 
-                  {!review.isSeed && (
-                    <button
-                      type="button"
-                      onClick={() => openEditForCard(review)}
-                      className={`inline-flex items-center gap-1 text-[11px] font-semibold transition ${
-                        isOwnDeviceReview
-                          ? 'text-[#EA4E1B] hover:underline'
-                          : 'text-neutral-400 hover:text-[#141414]'
-                      }`}
-                      title={t('Edit with your phone number', 'اپنے نمبر سے ایڈٹ کریں')}
-                    >
-                      <Edit3 className="h-3 w-3" aria-hidden="true" />
-                      <span>{isOwnDeviceReview ? t('Edit Mine', 'ایڈٹ') : t('Edit', 'ایڈٹ')}</span>
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!review.isSeed && (
+                      <button
+                        type="button"
+                        onClick={() => openEditForCard(review)}
+                        className={`inline-flex items-center gap-1 text-[11px] font-semibold transition ${
+                          isOwnDeviceReview
+                            ? 'text-[#EA4E1B] hover:underline'
+                            : 'text-neutral-400 hover:text-[#141414]'
+                        }`}
+                        title={t('Edit with your phone number', 'اپنے نمبر سے ایڈٹ کریں')}
+                      >
+                        <Edit3 className="h-3 w-3" aria-hidden="true" />
+                        <span>{isOwnDeviceReview ? t('Edit Mine', 'ایڈٹ') : t('Edit', 'ایڈٹ')}</span>
+                      </button>
+                    )}
+
+                    {isAdmin &&
+                      (confirmDeleteId === review.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={deletingId === review.id}
+                            onClick={() => void handleAdminDeleteReview(review)}
+                            className="rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {deletingId === review.id ? '...' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-600 hover:bg-neutral-200"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(review.id)}
+                          title="Delete review permanently"
+                          className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 transition hover:bg-red-600 hover:text-white"
+                        >
+                          <Trash2 className="h-3 w-3" aria-hidden="true" />
+                          <span>Delete</span>
+                        </button>
+                      ))}
+                  </div>
                 </div>
 
                 <p className="mt-3 text-sm leading-relaxed text-neutral-700">
@@ -715,6 +941,24 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
             </article>
           );
         })}
+      </div>
+
+              {/* Smooth Bottom Hide Reviews Pill */}
+              <div className="mt-6 flex justify-center border-t border-black/6 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setExpanded(false)}
+                  className={`inline-flex h-10 items-center gap-2 rounded-full border border-black/12 bg-[#FAF5F0] px-6 text-xs font-bold text-[#141414] transition hover:border-[#EA4E1B] hover:bg-orange-50/70 hover:text-[#EA4E1B] ${
+                    isUrdu ? 'font-urdu text-sm' : ''
+                  }`}
+                >
+                  <span>{t('Hide Reviews', 'ریویوز چھپائیں')}</span>
+                  <ChevronDown className="h-4 w-4 rotate-180" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -70,11 +70,11 @@ export async function renderCroppedImageToDataUrl(
   ctx.fillRect(0, 0, outW, outH);
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
 
-  let quality = 0.8;
+  let quality = 0.78;
   let dataUrl = canvas.toDataURL('image/jpeg', quality);
 
   while (dataUrl.length > maxBytes && quality > 0.34) {
-    quality -= 0.1;
+    quality -= 0.14;
     dataUrl = canvas.toDataURL('image/jpeg', quality);
   }
 
@@ -100,6 +100,24 @@ export async function compressImageFileToDataUrl(
   maxDimension = 900,
   maxBytes = 240_000,
 ): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please choose a valid image file (JPG, PNG, or WebP).');
+  }
+
+  if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      return await renderCroppedImageToDataUrl(
+        objectUrl,
+        { x: 0, y: 0, w: 1, h: 1 },
+        maxDimension,
+        maxBytes,
+      );
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   const rawUrl = await readFileAsDataUrl(file);
   return renderCroppedImageToDataUrl(
     rawUrl,

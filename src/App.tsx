@@ -1,10 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
+import {
+  AdminInlineProductModal,
+  AdminModeBanner,
+} from './components/AdminInlineControls';
 import { CartDrawer } from './components/CartDrawer';
 import { FloatingWhatsAppButton } from './components/FloatingWhatsAppButton';
 import { GlobalSearchBar } from './components/GlobalSearchBar';
 import { HomePage } from './components/HomePage';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { MobileContactSheet } from './components/MobileContactSheet';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import type { OverlayDomRefs } from './components/ShopViewport';
@@ -95,7 +100,9 @@ export default function App() {
     useState<ProductCategory>('All');
   const [cartItems, setCartItems] = useState<CartItem[]>(() => loadSavedCart());
   const [cartOpen, setCartOpen] = useState(false);
+  const [whatsAppOpen, setWhatsAppOpen] = useState(false);
   const [inspectedProduct, setInspectedProduct] = useState<CatalogProduct | null>(null);
+  const [editingAdminProduct, setEditingAdminProduct] = useState<CatalogProduct | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   const {
@@ -103,6 +110,9 @@ export default function App() {
     allProducts: allAdminProducts,
     usedPhones,
     liveReviews,
+    hiddenReviewIds,
+    reviewsVisible,
+    homeSections,
     socialLinks,
     siteImages: liveSiteImages,
     shopGallery: liveShopGallery,
@@ -219,6 +229,7 @@ export default function App() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setCartOpen(false);
+        setWhatsAppOpen(false);
         if (inspectedProduct) {
           handleCloseInspectedProduct();
         }
@@ -241,6 +252,7 @@ export default function App() {
 
   const handleNavigate = useCallback((page: SitePage, sectionHash?: string) => {
     setCartOpen(false);
+    setWhatsAppOpen(false);
     if (page === 'products') {
       setInitialProductCategory('All');
     }
@@ -403,6 +415,10 @@ export default function App() {
       />
 
       {activePage !== 'virtual-shop' && activePage !== 'admin' && (
+        <AdminModeBanner onOpenDashboard={() => handleNavigate('admin')} />
+      )}
+
+      {activePage !== 'virtual-shop' && activePage !== 'admin' && (
         <GlobalSearchBar
           query={globalSearchQuery}
           onQueryChange={setGlobalSearchQuery}
@@ -411,6 +427,7 @@ export default function App() {
           onInspectProduct={handleInspectProduct}
           onQuickAddToCart={(product) => handleAddToCart(product)}
           onNavigate={handleNavigate}
+          onAdminEditProduct={setEditingAdminProduct}
         />
       )}
 
@@ -419,12 +436,17 @@ export default function App() {
           <HomePage
             products={liveProducts}
             liveReviews={liveReviews}
+            hiddenReviewIds={hiddenReviewIds}
+            reviewsVisible={reviewsVisible}
+            homeSections={homeSections}
             siteImages={liveSiteImages}
+            mediaOverrides={mediaOverrides}
             onNavigate={handleNavigate}
             onBrowseCategory={handleBrowseCategory}
             onOpenVirtualShop={handleOpenVirtualShop}
             onInspectProduct={handleInspectProduct}
             onQuickAddToCart={(product) => handleAddToCart(product)}
+            onAdminEditProduct={setEditingAdminProduct}
           />
         )}
 
@@ -438,6 +460,7 @@ export default function App() {
               onInspectProduct={handleInspectProduct}
               onQuickAddToCart={(product) => handleAddToCart(product)}
               onOpenVirtualShop={handleOpenVirtualShop}
+              onAdminEditProduct={setEditingAdminProduct}
             />
           </Suspense>
         )}
@@ -453,7 +476,10 @@ export default function App() {
             <AboutContactPage
               siteImages={liveSiteImages}
               shopGallery={liveShopGallery}
+              mediaOverrides={mediaOverrides}
               liveReviews={liveReviews}
+              hiddenReviewIds={hiddenReviewIds}
+              reviewsVisible={reviewsVisible}
               onOpenVirtualShop={handleOpenVirtualShop}
             />
           </Suspense>
@@ -465,6 +491,7 @@ export default function App() {
               products={allAdminProducts}
               usedPhones={usedPhones}
               liveReviews={liveReviews}
+              reviewsVisible={reviewsVisible}
               socialLinks={socialLinks}
               mediaOverrides={mediaOverrides}
               onNavigate={handleNavigate}
@@ -545,9 +572,17 @@ export default function App() {
       <MobileBottomNav
         activePage={activePage}
         cartOpen={cartOpen}
+        whatsAppOpen={whatsAppOpen}
         cartCount={totalCartCount}
         onNavigate={handleNavigate}
-        onOpenCart={() => setCartOpen((prev) => !prev)}
+        onOpenCart={() => {
+          setWhatsAppOpen(false);
+          setCartOpen((prev) => !prev);
+        }}
+        onOpenWhatsApp={() => {
+          setCartOpen(false);
+          setWhatsAppOpen((prev) => !prev);
+        }}
       />
 
       <OfflineIndicator />
@@ -570,6 +605,17 @@ export default function App() {
         onAddToCart={handleAddToCart}
         onOpenCart={() => setCartOpen(true)}
         onOpenVirtualShop={handleOpenVirtualShop}
+      />
+
+      <AdminInlineProductModal
+        product={editingAdminProduct}
+        onClose={() => setEditingAdminProduct(null)}
+      />
+
+      <MobileContactSheet
+        open={whatsAppOpen}
+        onClose={() => setWhatsAppOpen(false)}
+        onNavigate={handleNavigate}
       />
 
       <FloatingWhatsAppButton hidden={activePage === 'virtual-shop'} />

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { REMOVED_IMAGE_MARKER } from '../components/ResilientImage';
 import {
   DEFAULT_SOCIAL_LINKS,
   SocialLinksConfig,
@@ -13,6 +14,28 @@ import {
 } from '../data/catalogData';
 import type { UsedPhoneItem } from '../data/usedPhonesData';
 import { db } from '../firebase';
+
+const MEDIA_CACHE_KEY = 'usman_live_media_cache_v1';
+const PRODUCTS_CACHE_KEY = 'usman_live_products_cache_v1';
+const HOME_SECTIONS_CACHE_KEY = 'usman_live_home_sections_cache_v1';
+
+function readJsonCache<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeJsonCache(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage quota errors (Firestore IndexedDB persistentLocalCache still backs it up)
+  }
+}
 
 export interface LiveCustomerReview {
   id: string;
@@ -32,15 +55,32 @@ export type SiteMediaSlotKey =
   | 'storefront'
   | 'signboard'
   | 'interiorWide'
-  | 'heroLifestyle';
+  | 'heroLifestyle'
+  | 'bentoCasesTrio'
+  | 'bentoAirpods'
+  | 'bentoSmartwatch'
+  | 'bentoAudioCollection'
+  | 'aerialMap';
 
 export interface SiteMediaOverride {
   slotKey: SiteMediaSlotKey;
   title?: string;
   caption?: string;
-  imageUrl: string;
+  imageUrl?: string;
   updatedAt?: string;
 }
+
+export interface HomeSectionsConfig {
+  trendingIds: string[];
+  featuredIds: string[];
+  newArrivalIds: string[];
+}
+
+export const DEFAULT_HOME_SECTIONS: HomeSectionsConfig = {
+  trendingIds: [],
+  featuredIds: [],
+  newArrivalIds: [],
+};
 
 export interface LiveCatalogProduct extends CatalogProduct {
   inStock?: boolean;
@@ -133,12 +173,43 @@ export const SITE_MEDIA_SLOTS: SiteMediaSlotConfig[] = [
 ];
 
 export function useLiveStoreData() {
-  const [productDocs, setProductDocs] = useState<Record<string, FirestoreProductDoc>>({});
-  const [mediaOverrides, setMediaOverrides] = useState<Record<string, SiteMediaOverride>>({});
+  const initialCachedProducts = useMemo(
+    () => readJsonCache<Record<string, FirestoreProductDoc>>(PRODUCTS_CACHE_KEY),
+    [],
+  );
+  const initialCachedMedia = useMemo(
+    () => readJsonCache<Record<string, SiteMediaOverride>>(MEDIA_CACHE_KEY),
+    [],
+  );
+  const initialCachedHomeSections = useMemo(
+    () => readJsonCache<HomeSectionsConfig>(HOME_SECTIONS_CACHE_KEY),
+    [],
+  );
+
+  const [productDocs, setProductDocs] = useState<Record<string, FirestoreProductDoc>>(
+    () => initialCachedProducts ?? {},
+  );
+  const [productsReady, setProductsReady] = useState<boolean>(
+    () => initialCachedProducts !== null,
+  );
+  const [mediaOverrides, setMediaOverrides] = useState<Record<string, SiteMediaOverride>>(
+    () => initialCachedMedia ?? {},
+  );
+  const [mediaReady, setMediaReady] = useState<boolean>(() => initialCachedMedia !== null);
   const [liveReviews, setLiveReviews] = useState<LiveCustomerReview[]>([]);
+  const [hiddenReviewIds, setHiddenReviewIds] = useState<string[]>([]);
+  const [reviewsVisible, setReviewsVisible] = useState<boolean>(true);
+  const [homeSections, setHomeSections] = useState<HomeSectionsConfig>(
+    () => initialCachedHomeSections ?? DEFAULT_HOME_SECTIONS,
+  );
   const [socialLinks, setSocialLinks] = useState<SocialLinksConfig>(DEFAULT_SOCIAL_LINKS);
 
   useEffect(() => {
+    const coldFallbackTimer = window.setTimeout(() => {
+      setMediaReady(true);
+      setProductsReady(true);
+    }, 2200);
+
     const unsubProducts = onSnapshot(
       collection(db, 'products'),
       (snap) => {
@@ -147,8 +218,24 @@ export function useLiveStoreData() {
           next[docSnap.id] = docSnap.data() as FirestoreProductDoc;
         });
         setProductDocs(next);
+        setProductsReady(true);
+        try {
+          localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(next));
+        } catch {
+          // If full base64 product images exceed localStorage quota, still persist slim metadata & deleted flags
+          const slim: Record<string, FirestoreProductDoc> = {};
+          Object.entries(next).forEach(([id, docData]) => {
+            const img = docData.image;
+            slim[id] = {
+              ...docData,
+              image: img && img.length > 60_000 ? undefined : img,
+            };
+          });
+          writeJsonCache(PRODUCTS_CACHE_KEY, slim);
+        }
       },
       (err) => {
+        setProductsReady(true);
         console.warn('Products live sync notice:', err.message);
       },
     );
@@ -159,19 +246,45 @@ export function useLiveStoreData() {
         const next: Record<string, SiteMediaOverride> = {};
         snap.docs.forEach((docSnap) => {
           const data = docSnap.data() as Partial<SiteMediaOverride>;
-          if (data.slotKey && data.imageUrl) {
+          if (data.slotKey) {
             next[docSnap.id] = {
               slotKey: data.slotKey as SiteMediaSlotKey,
-              title: data.title,
-              caption: data.caption,
-              imageUrl: data.imageUrl,
+              title: typeof data.title === 'string' ? data.title : undefined,
+              caption: typeof data.caption === 'string' ? data.caption : undefined,
+              imageUrl:
+                typeof data.imageUrl === 'string' && data.imageUrl.trim()
+                  ? data.imageUrl
+                  : undefined,
               updatedAt: data.updatedAt,
             };
           }
         });
         setMediaOverrides(next);
+        setMediaReady(true);
+        try {
+          localStorage.setItem(MEDIA_CACHE_KEY, JSON.stringify(next));
+        } catch {
+          // Persist most recently updated slots & all removal markers within quota
+          const sorted = Object.entries(next).sort((a, b) =>
+            (b[1].updatedAt || '').localeCompare(a[1].updatedAt || ''),
+          );
+          const partial: Record<string, SiteMediaOverride> = {};
+          for (const [k, v] of sorted) {
+            const candidate = { ...partial, [k]: v };
+            try {
+              localStorage.setItem(MEDIA_CACHE_KEY, JSON.stringify(candidate));
+              partial[k] = v;
+            } catch {
+              // Keep at least removal marker / title without large base64 if tight on quota
+              if (v.imageUrl === REMOVED_IMAGE_MARKER) {
+                partial[k] = v;
+              }
+            }
+          }
+        }
       },
       (err) => {
+        setMediaReady(true);
         console.warn('Site media live sync notice:', err.message);
       },
     );
@@ -224,11 +337,63 @@ export function useLiveStoreData() {
       },
     );
 
+    const unsubHiddenReviews = onSnapshot(
+      doc(db, 'siteSettings', 'hiddenReviews'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const d = docSnap.data() as { hiddenIds?: unknown; reviewsVisible?: unknown };
+          setHiddenReviewIds(
+            Array.isArray(d.hiddenIds)
+              ? d.hiddenIds.filter((id): id is string => typeof id === 'string')
+              : [],
+          );
+          setReviewsVisible(typeof d.reviewsVisible === 'boolean' ? d.reviewsVisible : true);
+          return;
+        }
+        setHiddenReviewIds([]);
+        setReviewsVisible(true);
+      },
+      (err) => {
+        console.warn('Hidden reviews live sync notice:', err.message);
+      },
+    );
+
+    const unsubHomeSections = onSnapshot(
+      doc(db, 'siteSettings', 'homeSections'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const d = docSnap.data() as {
+            trendingIds?: unknown;
+            featuredIds?: unknown;
+            newArrivalIds?: unknown;
+          };
+          const toIds = (v: unknown) =>
+            Array.isArray(v) ? v.filter((id): id is string => typeof id === 'string') : [];
+          const resolvedSections: HomeSectionsConfig = {
+            trendingIds: toIds(d.trendingIds),
+            featuredIds: toIds(d.featuredIds),
+            newArrivalIds: toIds(d.newArrivalIds),
+          };
+          setHomeSections(resolvedSections);
+          writeJsonCache(HOME_SECTIONS_CACHE_KEY, resolvedSections);
+          return;
+        }
+        setHomeSections(DEFAULT_HOME_SECTIONS);
+        writeJsonCache(HOME_SECTIONS_CACHE_KEY, DEFAULT_HOME_SECTIONS);
+      },
+      (err) => {
+        console.warn('Home sections live sync notice:', err.message);
+      },
+    );
+
     return () => {
+      window.clearTimeout(coldFallbackTimer);
       unsubProducts();
       unsubMedia();
       unsubReviews();
       unsubSocial();
+      unsubHiddenReviews();
+      unsubHomeSections();
     };
   }, []);
 
@@ -243,7 +408,16 @@ export function useLiveStoreData() {
           return [];
         }
         if (!override) {
-          return [{ ...base, inStock: true, hidden: false, isCustom: false, isOverridden: false }];
+          return [
+            {
+              ...base,
+              image: productsReady ? base.image : '',
+              inStock: true,
+              hidden: false,
+              isCustom: false,
+              isOverridden: false,
+            },
+          ];
         }
         const inStock = override.inStock !== undefined ? override.inStock : true;
         return [
@@ -275,7 +449,7 @@ export function useLiveStoreData() {
             specs: override.specs || base.specs,
             description: override.description || base.description,
             warrantyNote: override.warrantyNote || base.warrantyNote,
-            image: override.image || base.image,
+            image: override.image || (productsReady ? base.image : ''),
             variants:
               Array.isArray(override.variants) && override.variants.length > 0
                 ? override.variants
@@ -324,7 +498,7 @@ export function useLiveStoreData() {
             data.description ||
             'Available for pickup at Usman Mobile Repairing Centre or local delivery in Chak No. 8 & Pattoki.',
           warrantyNote: data.warrantyNote || 'Live check at counter',
-          image: data.image || SITE_IMAGES.realInteriorCounter,
+          image: data.image || (productsReady ? SITE_IMAGES.realInteriorCounter : ''),
           variants:
             Array.isArray(data.variants) && data.variants.length > 0
               ? data.variants
@@ -335,7 +509,7 @@ export function useLiveStoreData() {
       });
 
     return [...customProducts, ...mergedDefaults];
-  }, [productDocs]);
+  }, [productDocs, productsReady]);
 
   const visibleProducts = useMemo(
     () => allProducts.filter((p) => !p.hidden),
@@ -344,20 +518,32 @@ export function useLiveStoreData() {
 
   const usedPhones = useMemo<UsedPhoneItem[]>(() => [], []);
 
-  const liveSiteImages = useMemo(
-    () => ({
+  const liveSiteImages = useMemo(() => {
+    const resolveSlot = (slotKey: keyof typeof SITE_IMAGES): string => {
+      const overrideUrl = mediaOverrides[slotKey]?.imageUrl;
+      if (overrideUrl === REMOVED_IMAGE_MARKER) return REMOVED_IMAGE_MARKER;
+      if (overrideUrl) return overrideUrl;
+      // On a brand-new browser before initial Firestore siteMedia arrives, render clean shimmer
+      // instead of flashing an old/deleted default image for 1–2 seconds.
+      if (!mediaReady) return '';
+      return SITE_IMAGES[slotKey];
+    };
+
+    return {
       ...SITE_IMAGES,
-      realInteriorCounter:
-        mediaOverrides.realInteriorCounter?.imageUrl || SITE_IMAGES.realInteriorCounter,
-      realInteriorDoor:
-        mediaOverrides.realInteriorDoor?.imageUrl || SITE_IMAGES.realInteriorDoor,
-      storefront: mediaOverrides.storefront?.imageUrl || SITE_IMAGES.storefront,
-      signboard: mediaOverrides.signboard?.imageUrl || SITE_IMAGES.signboard,
-      interiorWide: mediaOverrides.interiorWide?.imageUrl || SITE_IMAGES.interiorWide,
-      heroLifestyle: mediaOverrides.heroLifestyle?.imageUrl || SITE_IMAGES.heroLifestyle,
-    }),
-    [mediaOverrides],
-  );
+      realInteriorCounter: resolveSlot('realInteriorCounter'),
+      realInteriorDoor: resolveSlot('realInteriorDoor'),
+      storefront: resolveSlot('storefront'),
+      signboard: resolveSlot('signboard'),
+      interiorWide: resolveSlot('interiorWide'),
+      heroLifestyle: resolveSlot('heroLifestyle'),
+      bentoCasesTrio: resolveSlot('bentoCasesTrio'),
+      bentoAirpods: resolveSlot('bentoAirpods'),
+      bentoSmartwatch: resolveSlot('bentoSmartwatch'),
+      bentoAudioCollection: resolveSlot('bentoAudioCollection'),
+      aerialMap: resolveSlot('aerialMap'),
+    };
+  }, [mediaOverrides, mediaReady]);
 
   const liveShopGallery = useMemo<ShopGalleryPhoto[]>(() => {
     const slotMap: Record<string, SiteMediaSlotKey> = {
@@ -371,21 +557,27 @@ export function useLiveStoreData() {
     return SHOP_GALLERY.map((photo) => {
       const slotKey = slotMap[photo.id];
       const override = slotKey ? mediaOverrides[slotKey] : undefined;
-      if (!override) return photo;
+      const src =
+        override?.imageUrl === REMOVED_IMAGE_MARKER
+          ? REMOVED_IMAGE_MARKER
+          : override?.imageUrl || (!mediaReady ? '' : photo.src);
       return {
         ...photo,
-        src: override.imageUrl || photo.src,
-        title: override.title?.trim() || photo.title,
-        caption: override.caption?.trim() || photo.caption,
+        src,
+        title: override?.title?.trim() || photo.title,
+        caption: override?.caption?.trim() || photo.caption,
       };
     });
-  }, [mediaOverrides]);
+  }, [mediaOverrides, mediaReady]);
 
   return {
     products: visibleProducts,
     allProducts,
     usedPhones,
     liveReviews,
+    hiddenReviewIds,
+    reviewsVisible,
+    homeSections,
     socialLinks,
     siteImages: liveSiteImages,
     shopGallery: liveShopGallery,

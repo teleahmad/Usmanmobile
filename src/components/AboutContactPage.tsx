@@ -16,21 +16,40 @@ import {
   ShopGalleryPhoto,
   SITE_IMAGES,
 } from '../data/catalogData';
-import { LiveCustomerReview } from '../hooks/useLiveStoreData';
+import {
+  LiveCustomerReview,
+  SiteMediaOverride,
+  SiteMediaSlotKey,
+} from '../hooks/useLiveStoreData';
+import { AdminImageControls } from './AdminInlineControls';
 import { CustomerReviewsSection } from './CustomerReviewsSection';
 import { ResilientImage } from './ResilientImage';
+
+const GALLERY_SLOT_MAP: Record<string, SiteMediaSlotKey> = {
+  'gallery-interior-counter': 'realInteriorCounter',
+  'gallery-interior-door': 'realInteriorDoor',
+  'gallery-storefront': 'storefront',
+  'gallery-signboard': 'signboard',
+  'gallery-wide': 'interiorWide',
+};
 
 interface AboutContactPageProps {
   siteImages?: Record<keyof typeof SITE_IMAGES, string>;
   shopGallery?: ShopGalleryPhoto[];
+  mediaOverrides?: Record<string, SiteMediaOverride>;
   liveReviews?: LiveCustomerReview[];
+  hiddenReviewIds?: string[];
+  reviewsVisible?: boolean;
   onOpenVirtualShop: (mode: ViewMode) => void;
 }
 
 export const AboutContactPage: React.FC<AboutContactPageProps> = ({
   siteImages = SITE_IMAGES,
   shopGallery = SHOP_GALLERY,
+  mediaOverrides = {},
   liveReviews = [],
+  hiddenReviewIds = [],
+  reviewsVisible = true,
   onOpenVirtualShop,
 }) => {
   const { t, isUrdu } = useLanguage();
@@ -80,6 +99,11 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
                 {/* Seamless 4-side feathered blur & smooth white dissolve without clipping signboard edges */}
                 <div className="pointer-events-none absolute inset-0 backdrop-blur-[2px] [-webkit-mask-image:radial-gradient(ellipse_82%_78%_at_center,transparent_66%,black_100%)] [mask-image:radial-gradient(ellipse_82%_78%_at_center,transparent_66%,black_100%)]" />
                 <div className="pointer-events-none absolute -inset-px rounded-2xl shadow-[inset_0_0_16px_10px_#ffffff]" />
+                <AdminImageControls
+                  slotKey="signboard"
+                  label="Shop Signboard"
+                  hasOverride={Boolean(mediaOverrides.signboard)}
+                />
               </div>
             </div>
           </div>
@@ -96,30 +120,40 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
         </div>
 
         <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {shopGallery.map((photo) => (
-            <figure
-              key={photo.id}
-              onClick={() => setLightboxPhoto(photo)}
-              className="group cursor-pointer overflow-hidden rounded-2xl border border-black/5 bg-white p-3 shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#EA4E1B]"
-            >
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-white">
-                <ResilientImage
-                  src={photo.src}
-                  alt={photo.title}
-                  className="h-full w-full scale-[1.02] object-cover transition-transform duration-300 group-hover:scale-[1.06]"
-                />
-                {/* Seamless 4-side feathered blur & smooth white dissolve (zero corner artifacts) */}
-                <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
-                <div className="pointer-events-none absolute -inset-px rounded-xl shadow-[inset_0_0_24px_14px_#ffffff]" />
-              </div>
-              <figcaption className="px-1 pt-3 pb-1">
-                <div className="text-sm font-bold text-[#141414]">{photo.title}</div>
-                <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                  {photo.caption}
-                </p>
-              </figcaption>
-            </figure>
-          ))}
+          {shopGallery.map((photo) => {
+            const slotKey = GALLERY_SLOT_MAP[photo.id];
+            return (
+              <figure
+                key={photo.id}
+                onClick={() => setLightboxPhoto(photo)}
+                className="group cursor-pointer overflow-hidden rounded-2xl border border-black/5 bg-white p-3 shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#EA4E1B]"
+              >
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-white">
+                  <ResilientImage
+                    src={photo.src}
+                    alt={photo.title}
+                    className="h-full w-full scale-[1.02] object-cover transition-transform duration-300 group-hover:scale-[1.06]"
+                  />
+                  {/* Seamless 4-side feathered blur & smooth white dissolve (zero corner artifacts) */}
+                  <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
+                  <div className="pointer-events-none absolute -inset-px rounded-xl shadow-[inset_0_0_24px_14px_#ffffff]" />
+                  {slotKey && (
+                    <AdminImageControls
+                      slotKey={slotKey}
+                      label={photo.title}
+                      hasOverride={Boolean(mediaOverrides[slotKey])}
+                    />
+                  )}
+                </div>
+                <figcaption className="px-1 pt-3 pb-1">
+                  <div className="text-sm font-bold text-[#141414]">{photo.title}</div>
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                    {photo.caption}
+                  </p>
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       </section>
 
@@ -211,11 +245,16 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
           </div>
 
           <div className="flex flex-col justify-between overflow-hidden rounded-2xl border border-black/5 bg-white p-3 shadow-xs lg:col-span-6">
-            <div className="aspect-[16/10] w-full overflow-hidden rounded-xl bg-neutral-100 lg:flex-1">
+            <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-neutral-100 lg:flex-1">
               <ResilientImage
-                src={SITE_IMAGES.aerialMap}
+                src={siteImages.aerialMap}
                 alt="Interactive 3D village map of Hussain Khan Wala"
                 className="h-full w-full object-cover"
+              />
+              <AdminImageControls
+                slotKey="aerialMap"
+                label="3D Village Map Preview"
+                hasOverride={Boolean(mediaOverrides.aerialMap)}
               />
             </div>
 
@@ -241,7 +280,11 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
       </section>
 
       {/* Live Customer Reviews & Ratings */}
-      <CustomerReviewsSection liveReviews={liveReviews} />
+      <CustomerReviewsSection
+        liveReviews={liveReviews}
+        hiddenReviewIds={hiddenReviewIds}
+        reviewsVisible={reviewsVisible}
+      />
 
       {/* Lightbox */}
       {lightboxPhoto && (

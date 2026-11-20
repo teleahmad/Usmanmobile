@@ -3,15 +3,15 @@ import {
   AlertCircle,
   ArrowLeft,
   Camera,
-  CheckCircle2,
-  Clock,
   Eye,
+  EyeOff,
+  KeyRound,
   Lock,
   LogOut,
+  Mail,
   MessageCircle,
   Package,
   Plus,
-  RefreshCw,
   Search,
   Share2,
   Shield,
@@ -22,23 +22,18 @@ import {
   User,
   Wrench,
 } from 'lucide-react';
-import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { getWhatsAppUrl, SHOP_CONFIG } from '../config/shopConfig';
-import { CATALOG_PRODUCTS, formatPkr, SitePage } from '../data/catalogData';
+import { useAdminAuth } from '../context/AdminAuthContext';
+import { formatPkr, SitePage } from '../data/catalogData';
 import { UsedPhoneItem } from '../data/usedPhonesData';
-import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../firebase';
+import { db } from '../firebase';
 import {
   LiveCatalogProduct,
   LiveCustomerReview,
@@ -85,31 +80,44 @@ interface AdminDashboardProps {
   products: LiveCatalogProduct[];
   usedPhones?: UsedPhoneItem[];
   liveReviews?: LiveCustomerReview[];
+  reviewsVisible?: boolean;
   socialLinks?: SocialLinksConfig;
   mediaOverrides: Record<string, SiteMediaOverride>;
   onNavigate: (page: SitePage) => void;
 }
 
-const AUTHORIZED_ADMIN_EMAILS = ['teleahmad768@gmail.com', 'hkwpro@gmail.com'];
-
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   products,
   usedPhones = [],
   liveReviews = [],
+  reviewsVisible = true,
   socialLinks = DEFAULT_SOCIAL_LINKS,
   mediaOverrides,
   onNavigate,
 }) => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const {
+    user,
+    authLoading,
+    isAdmin: isAuthorizedAdmin,
+    signInWithGoogle,
+    signInWithPassword,
+    signOutAdmin,
+  } = useAdminAuth();
   const [activeTab, setActiveTab] = useState<
     'repairs' | 'orders' | 'products' | 'used-phones' | 'photos' | 'social' | 'reviews'
   >('products');
   const [repairs, setRepairs] = useState<RepairTicketData[]>([]);
   const [orders, setOrders] = useState<OrderData[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Email & Password sign-in form state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [signingInPassword, setSigningInPassword] = useState(false);
+  const [signingInGoogle, setSigningInGoogle] = useState(false);
+  const [showConsoleHint, setShowConsoleHint] = useState(false);
 
   // New Repair Form state
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -120,43 +128,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newNotes, setNewNotes] = useState('');
   const [creatingRepair, setCreatingRepair] = useState(false);
 
-  // Auth Listener
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
   const handleGoogleSignIn = async () => {
-    try {
-      setFeedbackMsg(null);
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      console.error(err);
-      setFeedbackMsg({
-        text: 'Google Sign In failed. Check popup permissions.',
-        type: 'error',
-      });
+    setFeedbackMsg(null);
+    setShowConsoleHint(false);
+    setSigningInGoogle(true);
+    const result = await signInWithGoogle();
+    setSigningInGoogle(false);
+    if (!result.ok && result.error) {
+      setFeedbackMsg({ text: result.error, type: 'error' });
+    }
+  };
+
+  const handlePasswordSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedbackMsg(null);
+    setShowConsoleHint(false);
+    setSigningInPassword(true);
+    const result = await signInWithPassword(loginEmail, loginPassword);
+    setSigningInPassword(false);
+    if (result.ok) {
+      setLoginPassword('');
+    } else if (result.error) {
+      setFeedbackMsg({ text: result.error, type: 'error' });
+      if (result.needsConsoleSetup) {
+        setShowConsoleHint(true);
+      }
     }
   };
 
   const handleSignOut = async () => {
-    await signOut(auth);
+    await signOutAdmin();
     setRepairs([]);
     setOrders([]);
   };
 
-  const isAuthorizedAdmin = Boolean(
-    user?.email && AUTHORIZED_ADMIN_EMAILS.includes(user.email.toLowerCase()),
-  );
-
   // Real-time Firestore subscriptions when signed in as an authorized admin
   useEffect(() => {
     if (!user || !isAuthorizedAdmin) return;
-
-    setLoadingData(true);
 
     // 1. Repairs subscription
     const repairsCol = collection(db, 'repairs');
@@ -168,11 +176,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ...(docSnap.data() as Omit<RepairTicketData, 'id'>),
         }));
         setRepairs(loaded);
-        setLoadingData(false);
       },
       (error) => {
         console.warn('Repairs snapshot warning:', error);
-        setLoadingData(false);
       },
     );
 
@@ -412,32 +418,126 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {!user ? (
-          /* Login Card when not signed in */
-          <div className="mt-12 mx-auto max-w-md rounded-3xl bg-white p-8 text-center shadow-lg border border-black/5">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EA4E1B]/10 text-[#EA4E1B] mb-4">
-              <Lock className="h-8 w-8" />
+        {authLoading ? (
+          <div className="mt-16 flex flex-col items-center justify-center gap-3 text-neutral-500">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#EA4E1B]/25 border-t-[#EA4E1B]" />
+            <p className="text-xs font-semibold">Checking admin session...</p>
+          </div>
+        ) : !user ? (
+          /* Dual Sign-In Card: Email & Password + Google Popup */
+          <div className="mt-10 mx-auto max-w-md rounded-3xl bg-white p-7 sm:p-8 shadow-lg border border-black/5">
+            <div className="text-center">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EA4E1B]/10 text-[#EA4E1B] mb-3.5">
+                <Lock className="h-7 w-7" />
+              </div>
+              <h2 className="font-display text-xl font-extrabold text-[#141414]">
+                Admin Sign In
+              </h2>
+              <p className="mt-1.5 text-xs leading-relaxed text-neutral-600">
+                Sign in with your authorized admin email &amp; password or Google account to edit
+                products, photos, and customer reviews directly on the live store.
+              </p>
             </div>
-            <h2 className="font-display text-xl font-extrabold text-[#141414]">
-              Admin Sign In Required
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-neutral-600">
-              Please sign in with any of the authorized emails ending with{' '}
-              <strong className="text-neutral-900">pro@gmail.com</strong> or{' '}
-              <strong className="text-neutral-900">768@gmail.com</strong> to manage repair
-              tickets, view customer orders, and update products &amp; shop photos.
-            </p>
 
+            {/* Email & Password Login Form */}
+            <form onSubmit={handlePasswordSignIn} className="mt-6 space-y-3.5 text-left">
+              <div>
+                <label
+                  htmlFor="admin-email"
+                  className="block text-[11px] font-bold text-neutral-700"
+                >
+                  Admin Email
+                </label>
+                <div className="relative mt-1">
+                  <Mail className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    id="admin-email"
+                    type="email"
+                    required
+                    autoComplete="username"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="Enter authorized admin email"
+                    className="h-11 w-full rounded-xl border border-neutral-300 bg-neutral-50 pr-3 pl-9 text-xs font-medium text-[#141414] focus:border-[#EA4E1B] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="admin-password"
+                  className="block text-[11px] font-bold text-neutral-700"
+                >
+                  Password
+                </label>
+                <div className="relative mt-1">
+                  <KeyRound className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    id="admin-password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter admin password"
+                    className="h-11 w-full rounded-xl border border-neutral-300 bg-neutral-50 pr-10 pl-9 text-xs font-medium text-[#141414] focus:border-[#EA4E1B] focus:bg-white focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-lg p-1.5 text-neutral-400 hover:text-[#141414]"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={signingInPassword}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#EA4E1B] text-sm font-bold text-white shadow-md transition hover:bg-[#d44212] disabled:opacity-60"
+              >
+                <KeyRound className="h-4 w-4" />
+                <span>{signingInPassword ? 'Signing in...' : 'Sign In with Password'}</span>
+              </button>
+            </form>
+
+            {showConsoleHint && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-left text-[11px] leading-relaxed text-amber-900">
+                <p className="font-bold">One-time Firebase Console setup for Password Login:</p>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                  <li>Open Firebase Console &rarr; Authentication &rarr; Sign-in method &rarr; enable <strong>Email/Password</strong>.</li>
+                  <li>Go to Authentication &rarr; Users &rarr; click <strong>Add user</strong> and add both authorized admin emails with your chosen password.</li>
+                </ol>
+              </div>
+            )}
+
+            {/* Divider */}
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-neutral-200" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+                or
+              </span>
+              <div className="h-px flex-1 bg-neutral-200" />
+            </div>
+
+            {/* Google Popup Sign-In */}
             <button
               type="button"
+              disabled={signingInGoogle}
               onClick={handleGoogleSignIn}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#EA4E1B] py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#d44212]"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-neutral-300 bg-white text-sm font-bold text-[#141414] shadow-2xs transition hover:border-[#141414] hover:bg-neutral-50 disabled:opacity-60"
             >
-              <User className="h-4 w-4" />
-              <span>Sign In with Google</span>
+              <User className="h-4 w-4 text-[#EA4E1B]" />
+              <span>{signingInGoogle ? 'Opening Google...' : 'Sign In with Google Popup'}</span>
             </button>
 
-            <div className="mt-4 text-[11px] text-neutral-400">
+            <div className="mt-4 text-center text-[11px] text-neutral-400">
               Direct access for Usman Mobile staff · Hussain Khan Wala
             </div>
           </div>
@@ -459,14 +559,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <button
               type="button"
-              onClick={async () => {
-                await handleSignOut();
-                await handleGoogleSignIn();
-              }}
+              onClick={handleSignOut}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#EA4E1B] py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#d44212]"
             >
               <LogOut className="h-4 w-4" />
-              <span>Switch Google Account</span>
+              <span>Sign Out &amp; Switch Account</span>
             </button>
           </div>
         ) : (
@@ -924,6 +1021,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {activeTab === 'reviews' && (
               <AdminReviewsManager
                 liveReviews={liveReviews}
+                reviewsVisible={reviewsVisible}
                 onFeedback={setFeedbackMsg}
               />
             )}

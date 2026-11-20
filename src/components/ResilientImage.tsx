@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
+
+export const REMOVED_IMAGE_MARKER = '__REMOVED__';
 
 interface ResilientImageProps {
   src: string;
@@ -20,6 +22,37 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [src]);
+
+  // Cold-load wait before live Firestore media arrives — smooth shimmer instead of flashing old/deleted image
+  if (!src) {
+    return (
+      <div
+        aria-hidden="true"
+        className={`${className} animate-pulse bg-[#EAE0D5]`}
+      />
+    );
+  }
+
+  // Permanently removed by Admin — never fall back to the old deleted photo
+  if (src === REMOVED_IMAGE_MARKER) {
+    return (
+      <div
+        role="img"
+        aria-label={alt}
+        className={`${className} flex flex-col items-center justify-center bg-[#EFE7DF] px-4 text-center text-neutral-400`}
+      >
+        <ImageOff className="h-7 w-7 text-neutral-400/80" aria-hidden="true" />
+        <span className="mt-2 text-xs font-medium text-neutral-500">
+          Photo removed — upload a new image
+        </span>
+      </div>
+    );
+  }
+
   if (failed) {
     return (
       <div
@@ -35,18 +68,20 @@ export const ResilientImage: React.FC<ResilientImageProps> = ({
     );
   }
 
+  const isDataUrl = src.startsWith('data:');
+
   return (
     <img
       src={src}
       alt={alt}
-      loading={priority ? 'eager' : 'lazy'}
-      decoding={priority ? 'sync' : 'async'}
+      loading={priority || isDataUrl ? 'eager' : 'lazy'}
+      decoding={priority || isDataUrl ? 'sync' : 'async'}
       fetchPriority={priority ? 'high' : 'auto'}
       referrerPolicy="no-referrer"
       onLoad={() => setLoaded(true)}
       onError={() => setFailed(true)}
-      className={`${className} transition-opacity duration-300 ${
-        loaded || priority ? 'opacity-100' : 'opacity-0'
+      className={`${className} transition-opacity duration-200 ${
+        loaded || priority || isDataUrl ? 'opacity-100' : 'opacity-0'
       }`}
     />
   );

@@ -21,7 +21,8 @@ service cloud.firestore {
 
     function isBootstrappedAdmin() {
       return isSignedIn() &&
-        ((request.auth.token.email_verified == true &&
+        (((request.auth.token.email_verified == true ||
+           request.auth.token.firebase.sign_in_provider == 'password') &&
           (request.auth.token.email == 'teleahmad768@gmail.com' ||
            request.auth.token.email == 'hkwpro@gmail.com')) ||
          exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
@@ -100,12 +101,13 @@ service cloud.firestore {
     }
 
     function isValidSiteMedia(data) {
-      return data.keys().hasAll(['slotKey', 'imageUrl']) &&
+      return data.keys().hasAll(['slotKey']) &&
              data.keys().hasOnly(['slotKey', 'title', 'caption', 'imageUrl', 'updatedAt']) &&
              data.slotKey is string && data.slotKey.size() > 0 && data.slotKey.size() <= 60 &&
-             data.imageUrl is string && data.imageUrl.size() > 0 && data.imageUrl.size() <= 350000 &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 350000)) &&
              (!('title' in data) || (data.title is string && data.title.size() <= 120)) &&
-             (!('caption' in data) || (data.caption is string && data.caption.size() <= 300));
+             (!('caption' in data) || (data.caption is string && data.caption.size() <= 300)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
     }
 
     function isValidSocialLinks(data) {
@@ -115,6 +117,21 @@ service cloud.firestore {
              (!('facebook' in data) || (data.facebook is string && data.facebook.size() <= 300)) &&
              (!('instagram' in data) || (data.instagram is string && data.instagram.size() <= 300)) &&
              (!('x' in data) || (data.x is string && data.x.size() <= 300)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
+    }
+
+    function isValidHiddenReviews(data) {
+      return data.keys().hasOnly(['hiddenIds', 'reviewsVisible', 'updatedAt']) &&
+             (!('hiddenIds' in data) || (data.hiddenIds is list && data.hiddenIds.size() <= 50)) &&
+             (!('reviewsVisible' in data) || data.reviewsVisible is bool) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
+    }
+
+    function isValidHomeSections(data) {
+      return data.keys().hasOnly(['trendingIds', 'featuredIds', 'newArrivalIds', 'updatedAt']) &&
+             (!('trendingIds' in data) || (data.trendingIds is list && data.trendingIds.size() <= 24)) &&
+             (!('featuredIds' in data) || (data.featuredIds is list && data.featuredIds.size() <= 24)) &&
+             (!('newArrivalIds' in data) || (data.newArrivalIds is list && data.newArrivalIds.size() <= 24)) &&
              (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 40));
     }
 
@@ -190,11 +207,19 @@ service cloud.firestore {
       allow delete: if isValidId(slotId) && isBootstrappedAdmin();
     }
 
-    // 5b. Shop Social Media Links & Settings (Public read for footer buttons, admin-only write)
+    // 5b. Shop Social Media Links & Settings (Public read for footer/reviews/home, admin-only write)
     match /siteSettings/{settingId} {
       allow read: if true;
-      allow create: if settingId == 'socialLinks' && isBootstrappedAdmin() && isValidSocialLinks(incoming());
-      allow update: if settingId == 'socialLinks' && isBootstrappedAdmin() && isValidSocialLinks(incoming());
+      allow create: if isBootstrappedAdmin() && (
+        (settingId == 'socialLinks' && isValidSocialLinks(incoming())) ||
+        (settingId == 'hiddenReviews' && isValidHiddenReviews(incoming())) ||
+        (settingId == 'homeSections' && isValidHomeSections(incoming()))
+      );
+      allow update: if isBootstrappedAdmin() && (
+        (settingId == 'socialLinks' && isValidSocialLinks(incoming())) ||
+        (settingId == 'hiddenReviews' && isValidHiddenReviews(incoming())) ||
+        (settingId == 'homeSections' && isValidHomeSections(incoming()))
+      );
       allow delete: if isValidId(settingId) && isBootstrappedAdmin();
     }
 

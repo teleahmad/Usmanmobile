@@ -94,7 +94,7 @@
         "imageUrl": { "type": "string", "maxLength": 350000 },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["slotKey", "imageUrl"]
+      "required": ["slotKey"]
     },
     "SocialLinks": {
       "title": "SocialLinks",
@@ -106,6 +106,27 @@
         "facebook": { "type": "string", "maxLength": 300 },
         "instagram": { "type": "string", "maxLength": 300 },
         "x": { "type": "string", "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 40 }
+      }
+    },
+    "HiddenReviews": {
+      "title": "HiddenReviews",
+      "description": "Admin visibility toggle for Customer Reviews section and list of hidden baseline review IDs",
+      "type": "object",
+      "properties": {
+        "hiddenIds": { "type": "array" },
+        "reviewsVisible": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 40 }
+      }
+    },
+    "HomeSections": {
+      "title": "HomeSections",
+      "description": "Admin-curated product ID lists for Trending, Featured, and New Arrival rows on Home page",
+      "type": "object",
+      "properties": {
+        "trendingIds": { "type": "array" },
+        "featuredIds": { "type": "array" },
+        "newArrivalIds": { "type": "array" },
         "updatedAt": { "type": "string", "format": "date-time", "maxLength": 40 }
       }
     },

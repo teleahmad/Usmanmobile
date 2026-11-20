@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Edit3,
+  Eye,
+  EyeOff,
   Plus,
   Smartphone,
   Star,
@@ -654,14 +656,43 @@ export const AdminUsedPhonesManager: React.FC<AdminUsedPhonesManagerProps> = ({
 
 interface AdminReviewsManagerProps extends FeedbackHandler {
   liveReviews: LiveCustomerReview[];
+  reviewsVisible?: boolean;
 }
 
 export const AdminReviewsManager: React.FC<AdminReviewsManagerProps> = ({
   liveReviews,
+  reviewsVisible = true,
   onFeedback,
 }) => {
   const [deleteTarget, setDeleteTarget] = useState<LiveCustomerReview | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
+
+  const handleToggleVisibility = async () => {
+    try {
+      setTogglingVisibility(true);
+      const next = !reviewsVisible;
+      await setDoc(
+        doc(db, 'siteSettings', 'hiddenReviews'),
+        {
+          reviewsVisible: next,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      onFeedback({
+        text: next
+          ? 'Customer Reviews & Ratings section is now VISIBLE on your website.'
+          : 'Customer Reviews & Ratings section is now HIDDEN from visitors.',
+        type: 'success',
+      });
+    } catch (err) {
+      console.error('Toggle reviews visibility error:', err);
+      onFeedback({ text: 'Could not update reviews visibility setting.', type: 'error' });
+    } finally {
+      setTogglingVisibility(false);
+    }
+  };
 
   const handleDeleteReview = async () => {
     if (!deleteTarget) return;
@@ -680,14 +711,63 @@ export const AdminReviewsManager: React.FC<AdminReviewsManagerProps> = ({
   };
 
   return (
-    <div className="rounded-3xl border border-black/5 bg-white p-6 shadow-sm">
-      <h3 className="font-display text-base font-bold text-[#141414]">
-        Live Customer Reviews ({liveReviews.length})
-      </h3>
-      <p className="mt-1 text-xs text-neutral-500">
-        Reviews submitted by customers on your website. Only the last 4 digits of each mobile number
-        are stored for customer privacy.
-      </p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${
+              reviewsVisible
+                ? 'bg-emerald-50 text-emerald-600'
+                : 'bg-amber-50 text-amber-600'
+            }`}
+          >
+            {reviewsVisible ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+          </span>
+          <div>
+            <div className="text-sm font-bold text-[#141414]">
+              Customer Reviews &amp; Ratings Section:{' '}
+              <span className={reviewsVisible ? 'text-emerald-600' : 'text-amber-600'}>
+                {reviewsVisible ? 'Visible to Visitors' : 'Hidden from Visitors'}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Show or hide the entire Customer Reviews &amp; Ratings section across your Home and Contact pages instantly.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          disabled={togglingVisibility}
+          onClick={() => void handleToggleVisibility()}
+          className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-5 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 ${
+            reviewsVisible
+              ? 'bg-[#141414] hover:bg-neutral-800'
+              : 'bg-[#EA4E1B] hover:bg-[#d44212]'
+          }`}
+        >
+          {reviewsVisible ? (
+            <>
+              <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{togglingVisibility ? 'Saving...' : 'Hide Reviews Section'}</span>
+            </>
+          ) : (
+            <>
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{togglingVisibility ? 'Saving...' : 'Show Reviews Section'}</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="rounded-3xl border border-black/5 bg-white p-6 shadow-sm">
+        <h3 className="font-display text-base font-bold text-[#141414]">
+          Live Customer Reviews ({liveReviews.length})
+        </h3>
+        <p className="mt-1 text-xs text-neutral-500">
+          Reviews submitted by customers on your website. Only the last 4 digits of each mobile number
+          are stored for customer privacy.
+        </p>
 
       {liveReviews.length === 0 ? (
         <div className="mt-6 rounded-2xl bg-[#F8F6F4] p-8 text-center text-xs text-neutral-500">
@@ -773,6 +853,7 @@ export const AdminReviewsManager: React.FC<AdminReviewsManagerProps> = ({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

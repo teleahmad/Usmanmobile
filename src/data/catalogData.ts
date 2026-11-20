@@ -1,6 +1,6 @@
 import bentoAudioImg from '../assets/images/bento_audio_collection_1795068494283.jpg';
 import bentoCasesTrioImg from '../assets/images/bento_cases_trio_1795068493756.jpg';
-import heroMobileLifestyleImg from '../assets/images/hero_mobile_lifestyle_1795068495146.jpg';
+import heroUsmanPortraitImg from '../assets/images/usman_hero_portrait_1795167657928.jpg';
 import btSpeakerImg from '../assets/images/item_bt_speaker_1795068000118.jpg';
 import handsfreeWiredImg from '../assets/images/item_handsfree_wired_1795068000417.jpg';
 import keypadPhoneImg from '../assets/images/item_keypad_phone_1795068000112.jpg';
@@ -86,13 +86,13 @@ export interface CustomerReview {
 }
 
 export const SITE_IMAGES = {
-  heroLifestyle: heroMobileLifestyleImg,
+  heroLifestyle: heroUsmanPortraitImg,
   bentoCasesTrio: bentoCasesTrioImg,
   bentoAudioCollection: bentoAudioImg,
   bentoAirpods: airpodsAudioImg,
   bentoSmartwatch: smartphonesWatchImg,
-  realInteriorCounter: '/assets/aistudio/WhatsApp_Image_2026-11-19_at_9.08.33_AM__1__bf16940b.jpeg',
-  realInteriorDoor: '/assets/aistudio/WhatsApp_Image_2026-11-19_at_9.08.33_AM_9d61709f.jpeg',
+  realInteriorCounter: '/assets/aistudio/WhatsApp_Image_2026-11-20_at_2.36.58_PM__1__9ded33d3.jpeg',
+  realInteriorDoor: '/assets/aistudio/WhatsApp_Image_2026-11-20_at_2.36.58_PM__2__112fec23.jpeg',
   storefront: SHOP_IMAGES.storefront,
   interiorWide: SHOP_IMAGES.interiorWide,
   signboard: SHOP_IMAGES.signboard,

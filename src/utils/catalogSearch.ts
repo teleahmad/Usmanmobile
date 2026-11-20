@@ -6,80 +6,62 @@ import {
   RepairService,
 } from '../data/catalogData';
 
-const PHONE_BRAND_WORDS = new Set([
-  'infinix',
-  'tecno',
-  'samsung',
-  'vivo',
-  'oppo',
-  'xiaomi',
-  'redmi',
-  'iphone',
-  'apple',
-  'realme',
-  'itel',
-  'nokia',
-  'oneplus',
-  'huawei',
-  'pixel',
-  'spark',
-  'hot',
-  'note',
-  'camon',
-  'galaxy',
-]);
-
-const ACCESSORY_COMPATIBLE_CATEGORIES = new Set([
-  'protection',
-  'charging',
-  'power & parts',
-]);
-
-const TOKEN_SYNONYMS: Record<string, string[]> = {
-  cover: ['cover', 'case', 'magsafe', 'armor', 'bumper', 'pouch'],
-  case: ['case', 'cover', 'magsafe', 'armor', 'bumper'],
-  glass: ['glass', 'tempered', '9d', 'protector', 'screen'],
-  protector: ['protector', 'glass', 'tempered', '9d'],
-  '9d': ['9d', 'glass', 'tempered'],
-  '65w': ['65w', '67w', 'fast', 'turbo', 'gan'],
-  '67w': ['67w', '65w', 'fast', 'turbo', 'gan'],
-  charger: ['charger', 'adapter', 'cable', 'gan', 'charging'],
-  cable: ['cable', 'type-c', 'usb', 'lightning', 'data'],
-  airpods: ['airpods', 'tws', 'earbuds', 'bluetooth', 'pods'],
-  earbuds: ['earbuds', 'airpods', 'tws', 'handsfree'],
-  handsfree: ['handsfree', 'earphone', 'earphones', 'aux', 'ronin'],
-  battery: ['battery', 'cell', '5000mah', 'power', 'drain'],
-  powerbank: ['power bank', 'powerbank', '20,000mah', '20000mah'],
-  watch: ['watch', 'smartwatch', 'calling'],
-  speaker: ['speaker', 'bluetooth', 'bass'],
-  keypad: ['keypad', 'pta', 'button', 'dual sim'],
-  lcd: ['lcd', 'screen', 'panel', 'touch', 'display', 'amoled', 'ips'],
-  screen: ['screen', 'lcd', 'panel', 'touch', 'display', 'glass'],
-  repair: ['repair', 'replacement', 'fix', 'ic', 'flash', 'swap', 'diagnostics'],
+const SYNONYM_MAP: Record<string, string[]> = {
+  cover: ['cover', 'case', 'magsafe', 'armor', 'bumper', 'pouch', 'protection'],
+  case: ['case', 'cover', 'magsafe', 'armor', 'bumper', 'pouch', 'protection'],
+  glass: ['glass', 'tempered', '9d', 'protector', 'screen', 'protection'],
+  charger: ['charger', 'adapter', 'charging', 'gan', 'power', '65w', '67w', '33w'],
+  cable: ['cable', 'type-c', 'usb', 'lightning', 'cord', 'data'],
+  airpods: ['airpods', 'tws', 'earbuds', 'bluetooth', 'pods', 'audio'],
+  handsfree: ['handsfree', 'earphone', 'earphones', 'aux', 'ronin', 'audio'],
+  battery: ['battery', 'cell', '5000mah', 'power', 'backup', 'drain'],
+  powerbank: ['power bank', 'powerbank', '20,000mah', '10,000mah', 'battery'],
+  watch: ['watch', 'smartwatch', 'calling', 'wearable'],
+  speaker: ['speaker', 'bluetooth', 'bass', 'audio'],
+  keypad: ['keypad', 'pta', 'button', 'dual sim', 'phone'],
+  lcd: ['lcd', 'screen', 'panel', 'touch', 'display', 'amoled', 'ips', 'repair'],
+  screen: ['screen', 'lcd', 'panel', 'touch', 'display', 'glass', 'repair'],
+  repair: ['repair', 'replacement', 'fix', 'ic', 'flash', 'swap', 'diagnostics', 'service'],
   software: ['software', 'flash', 'frp', 'unlock', 'logo', 'bootloop'],
-  jack: ['jack', 'charging', 'port', 'ic'],
-  mic: ['mic', 'speaker', 'earpiece', 'ringer', 'audio', 'camera'],
-  water: ['water', 'dead', 'board', 'damage'],
+  jack: ['jack', 'charging', 'port', 'ic', 'repair'],
+  mic: ['mic', 'speaker', 'earpiece', 'ringer', 'audio', 'camera', 'repair'],
+  water: ['water', 'dead', 'board', 'damage', 'repair'],
+  infinix: ['infinix', 'hot', 'note', 'smart', 'zero'],
+  samsung: ['samsung', 'galaxy', 'a54', 's23', 's24', 'ultra'],
+  tecno: ['tecno', 'spark', 'camon', 'pova'],
+  xiaomi: ['xiaomi', 'redmi', 'note'],
+  iphone: ['iphone', 'apple', 'pro', 'max'],
 };
 
-function expandToken(token: string): string[] {
-  return TOKEN_SYNONYMS[token] ?? [token];
-}
-
-function tokenizeQuery(query: string): string[] {
-  return query
+function tokenize(text: string): string[] {
+  return text
     .toLowerCase()
-    .replace(/[^a-z0-9\s\-+]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.length > 0 && t !== 'for' && t !== 'and' && t !== 'or' && t !== 'mobile' && t !== 'phone');
+    .filter((t) => t.length > 0);
+}
+
+function getKeywords(text: string): Set<string> {
+  const tokens = tokenize(text);
+  const set = new Set<string>(tokens);
+  // Add synonyms
+  for (const token of tokens) {
+    for (const [key, syns] of Object.entries(SYNONYM_MAP)) {
+      if (token === key || syns.includes(token)) {
+        set.add(key);
+        syns.forEach((s) => set.add(s));
+      }
+    }
+  }
+  return set;
 }
 
 export function matchesProductQuery(product: CatalogProduct, rawQuery: string): boolean {
   const q = rawQuery.trim().toLowerCase();
   if (!q) return true;
 
-  const haystack = [
+  const productText = [
     product.name,
     product.category,
     product.specs,
@@ -91,84 +73,69 @@ export function matchesProductQuery(product: CatalogProduct, rawQuery: string): 
     .join(' ')
     .toLowerCase();
 
-  if (haystack.includes(q)) return true;
+  // Direct substring match
+  if (productText.includes(q)) return true;
 
-  const tokens = tokenizeQuery(q);
-  if (tokens.length === 0) return haystack.includes(q);
+  const queryTokens = tokenize(q);
+  if (queryTokens.length === 0) return false;
 
-  const nonBrandTokens = tokens.filter((t) => !PHONE_BRAND_WORDS.has(t));
-  const hasBrandToken = tokens.some((t) => PHONE_BRAND_WORDS.has(t));
+  const productKeywords = getKeywords(productText);
 
-  // If user typed ONLY a phone brand (e.g. "Infinix" or "Samsung"), show compatible accessories
-  if (hasBrandToken && nonBrandTokens.length === 0) {
-    return (
-      haystack.includes(tokens[0]) ||
-      ACCESSORY_COMPATIBLE_CATEGORIES.has(product.category.toLowerCase())
-    );
-  }
+  // Check if every query token or its synonym is present in product keywords or text
+  const matchCount = queryTokens.filter((token) => {
+    if (productText.includes(token) || productKeywords.has(token)) return true;
+    // Check synonym matches
+    for (const [key, syns] of Object.entries(SYNONYM_MAP)) {
+      if (token === key || syns.includes(token)) {
+        if (productText.includes(key) || syns.some((s) => productText.includes(s))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }).length;
 
-  // Otherwise every non-brand token must match directly or via its synonym group
-  const matchesCoreTokens = nonBrandTokens.every((token) => {
-    const candidates = expandToken(token);
-    return candidates.some((word) => haystack.includes(word));
-  });
-
-  if (!matchesCoreTokens) return false;
-
-  // If a phone brand was also included (e.g. "Infinix Cover"), ensure product is brand-compatible or mentions it
-  if (hasBrandToken) {
-    return (
-      tokens.some((t) => PHONE_BRAND_WORDS.has(t) && haystack.includes(t)) ||
-      ACCESSORY_COMPATIBLE_CATEGORIES.has(product.category.toLowerCase()) ||
-      product.category.toLowerCase() === 'audio'
-    );
-  }
-
-  return true;
+  // Match if at least 70% of tokens match (or all tokens for short queries)
+  const threshold = queryTokens.length <= 2 ? queryTokens.length : Math.ceil(queryTokens.length * 0.6);
+  return matchCount >= threshold;
 }
 
 export function matchesRepairQuery(service: RepairService, rawQuery: string): boolean {
   const q = rawQuery.trim().toLowerCase();
   if (!q) return false;
 
-  const haystack = `${service.title} ${service.summary} ${service.warranty} repair`.toLowerCase();
-  if (haystack.includes(q)) return true;
+  const repairText = `${service.title} ${service.summary} ${service.warranty} repair service`.toLowerCase();
+  if (repairText.includes(q)) return true;
 
-  const tokens = tokenizeQuery(q);
-  if (tokens.length === 0) return false;
+  const queryTokens = tokenize(q);
+  if (queryTokens.length === 0) return false;
 
-  const nonBrandTokens = tokens.filter((t) => !PHONE_BRAND_WORDS.has(t));
-  const hasBrandToken = tokens.some((t) => PHONE_BRAND_WORDS.has(t));
+  // If query specifically mentions repair or parts/lcd/battery/charging/jack/software/mic/water
+  const repairKeywords = getKeywords(repairText);
+  const matchCount = queryTokens.filter((token) => {
+    if (repairText.includes(token) || repairKeywords.has(token)) return true;
+    for (const [key, syns] of Object.entries(SYNONYM_MAP)) {
+      if (token === key || syns.includes(token)) {
+        if (repairText.includes(key) || syns.some((s) => repairText.includes(s))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }).length;
 
-  // Pure brand search (e.g. "Infinix", "Samsung") includes top LCD/Charging/Battery repairs
-  if (hasBrandToken && nonBrandTokens.length === 0) {
-    return true;
-  }
-
-  // Avoid matching repair services when user searches purely for accessories like "AirPods" or "Cover"
-  const isRepairRelated = nonBrandTokens.some((t) =>
-    ['lcd', 'screen', 'panel', 'touch', 'repair', 'fix', 'jack', 'port', 'ic', 'battery', 'software', 'flash', 'frp', 'unlock', 'mic', 'camera', 'water', 'dead', 'board'].includes(t),
-  );
-  if (!isRepairRelated) return false;
-
-  return nonBrandTokens.every((token) => {
-    if (token === 'repair') return true;
-    const candidates = expandToken(token);
-    return candidates.some((word) => haystack.includes(word));
-  });
+  return matchCount >= Math.min(queryTokens.length, 1);
 }
 
 export function matchesDigitalServiceQuery(service: DigitalService, rawQuery: string): boolean {
   const q = rawQuery.trim().toLowerCase();
   if (!q) return false;
 
-  const haystack = `${service.title} ${service.details} ${service.availability}`.toLowerCase();
-  if (haystack.includes(q)) return true;
+  const text = `${service.title} ${service.details} ${service.availability}`.toLowerCase();
+  if (text.includes(q)) return true;
 
-  const tokens = tokenizeQuery(q);
-  if (tokens.length === 0) return false;
-
-  return tokens.every((t) => haystack.includes(t));
+  const queryTokens = tokenize(q);
+  return queryTokens.some((t) => text.includes(t));
 }
 
 export interface GlobalSearchResults {

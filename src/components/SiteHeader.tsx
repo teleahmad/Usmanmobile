@@ -34,38 +34,63 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[#F3ECE6]/95 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 lg:px-8">
-        {/* Zone 1: Brand Wordmark */}
+      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-2 px-3 sm:gap-6 sm:px-6 lg:gap-8 lg:px-8">
+        {/* Zone 1: Professional Brand Emblem + Wordmark + Tagline */}
         <button
           type="button"
           onClick={() => handleNavClick('home')}
-          className="group shrink-0 text-left transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#EA4E1B]"
+          className="group flex min-w-0 flex-1 items-center gap-2.5 text-left transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#EA4E1B] md:flex-none"
         >
-          <div
-            className="font-display text-sm tracking-tight transition-colors sm:text-base"
-            style={{
-              fontStyle: 'normal',
-              textDecorationLine: 'none',
-              fontWeight: 'bold',
-              fontFamily: 'Georgia',
-              textAlign: 'left',
-              color: '#000000',
-            }}
-          >
-            Usman Mobile Repairing Centre
-          </div>
-          <div
-            className={`text-[10px] font-medium tracking-wide ${isUrdu ? 'font-urdu text-[11px]' : ''}`}
-            style={{ fontFamily: isUrdu ? undefined : 'Verdana', color: '#cf1c1c' }}
-          >
-            {t('Expert Repairs & Accessories', 'ماہر ریپئرنگ، ایسسریز اور استعمال شدہ فون')}
+          <img
+            src="/pwa-192x192.png"
+            alt="Usman Mobile Logo"
+            width={40}
+            height={40}
+            className="h-9 w-9 shrink-0 rounded-xl object-cover shadow-xs ring-1 ring-black/10 transition-transform duration-200 group-hover:scale-[1.03] sm:h-10 sm:w-10"
+          />
+
+          <div className="min-w-0 leading-none">
+            {isUrdu ? (
+              <>
+                <div className="font-urdu truncate text-[15px] font-bold leading-snug text-[#141414] sm:text-[17px]">
+                  <span className="sm:hidden">عثمان موبائل</span>
+                  <span className="hidden sm:inline">
+                    عثمان موبائل <span className="text-[#EA4E1B]">ریپئرنگ سینٹر</span>
+                  </span>
+                </div>
+                <div className="font-urdu mt-0.5 truncate text-[11px] font-medium text-neutral-600 sm:text-xs">
+                  <span className="sm:hidden">ریپئرنگ سینٹر اور ایسسریز</span>
+                  <span className="hidden sm:inline">ماہر ریپئرنگ · معیاری ایسسریز</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-display truncate text-[15px] font-extrabold tracking-tight leading-tight text-[#141414] sm:text-base lg:text-[17px]">
+                  <span>Usman Mobile</span>
+                  <span className="hidden text-[#EA4E1B] sm:inline"> Repairing Centre</span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 truncate text-[10.5px] font-semibold tracking-wide text-neutral-600 sm:text-[11px]">
+                  <span className="text-[#EA4E1B] sm:hidden">Repairing Centre</span>
+                  <span aria-hidden="true" className="text-neutral-400 sm:hidden">
+                    ·
+                  </span>
+                  <span className="sm:hidden">Accessories</span>
+
+                  <span className="hidden sm:inline">Expert Phone Repairs</span>
+                  <span aria-hidden="true" className="hidden text-[#EA4E1B] sm:inline">
+                    ·
+                  </span>
+                  <span className="hidden sm:inline">Original Accessories</span>
+                </div>
+              </>
+            )}
           </div>
         </button>
 
         {/* Zone 2: 5 Clean Single-Line Navigation Links */}
         <nav
           aria-label="Primary navigation"
-          className="hidden items-center gap-7 md:flex lg:gap-8"
+          className="hidden items-center gap-6 md:flex lg:gap-8"
         >
           {NAV_ITEMS.map((item) => {
             const isActive = activePage === item.id;
@@ -96,13 +121,13 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
         </nav>
 
         {/* Zone 3: Language Switcher + Cart + Mobile Menu Trigger */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={toggleLang}
             aria-label={lang === 'en' ? 'Switch to Urdu' : 'Switch to English'}
             title={lang === 'en' ? 'اردو میں دیکھیں' : 'View in English'}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-black/12 bg-white px-3 text-xs font-bold text-[#141414] shadow-2xs transition hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+            className="inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-black/12 bg-white px-2.5 text-xs font-bold text-[#141414] shadow-2xs transition hover:border-[#EA4E1B] hover:text-[#EA4E1B] sm:gap-1.5 sm:px-3"
           >
             <Globe className="h-3.5 w-3.5 shrink-0 text-[#EA4E1B]" aria-hidden="true" />
             <span className={lang === 'en' ? 'font-urdu text-xs font-semibold' : ''}>
@@ -113,16 +138,22 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
           <button
             type="button"
             onClick={onOpenCart}
-            className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#EA4E1B] px-4 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:bg-[#d44212] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA4E1B] sm:px-5"
+            aria-label={cartCount > 0 ? `Cart (${cartCount} items)` : 'Open cart'}
+            className="relative inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#EA4E1B] px-3 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:bg-[#d44212] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA4E1B] sm:h-10 sm:px-5"
           >
             <ShoppingBag
               className="h-4 w-4 shrink-0 transition-transform duration-200 hover:scale-110"
               aria-hidden="true"
             />
-            <span className={`tabular-nums ${isUrdu ? 'font-urdu' : ''}`}>
+            <span className={`hidden tabular-nums sm:inline ${isUrdu ? 'font-urdu' : ''}`}>
               {t('Cart', 'کارٹ')}
               {cartCount > 0 ? ` (${cartCount})` : ''}
             </span>
+            {cartCount > 0 && (
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-extrabold tabular-nums text-[#EA4E1B] sm:hidden">
+                {cartCount}
+              </span>
+            )}
           </button>
 
           <button
@@ -130,7 +161,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileMenuOpen}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-neutral-800 shadow-xs transition-colors hover:text-[#EA4E1B] md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-800 shadow-xs transition-colors hover:text-[#EA4E1B] sm:h-10 sm:w-10 md:hidden"
           >
             {mobileMenuOpen ? (
               <X className="h-5 w-5" aria-hidden="true" />

@@ -19,6 +19,7 @@ import {
   SitePage,
 } from '../data/catalogData';
 import { runGlobalCatalogSearch } from '../utils/catalogSearch';
+import { AdminProductEditTrigger } from './AdminInlineControls';
 import { ResilientImage } from './ResilientImage';
 
 export const QUICK_SEARCH_CHIPS: Array<{ label: string; urLabel: string }> = [
@@ -37,6 +38,7 @@ interface GlobalSearchBarProps {
   onInspectProduct: (product: CatalogProduct) => void;
   onQuickAddToCart: (product: CatalogProduct) => void;
   onNavigate: (page: SitePage, sectionHash?: string) => void;
+  onAdminEditProduct?: (product: CatalogProduct) => void;
 }
 
 export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
@@ -47,6 +49,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
   onInspectProduct,
   onQuickAddToCart,
   onNavigate,
+  onAdminEditProduct,
 }) => {
   const { t, isUrdu } = useLanguage();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -307,6 +310,11 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
                                 alt={product.name}
                                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                               />
+                              {onAdminEditProduct && (
+                                <AdminProductEditTrigger
+                                  onClick={() => onAdminEditProduct(product)}
+                                />
+                              )}
                             </div>
                             <div className="flex flex-1 flex-col justify-between p-2.5">
                               <div>

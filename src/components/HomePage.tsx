@@ -5,10 +5,13 @@ import {
   ArrowUpRight,
   Check,
   Compass,
+  Edit3,
+  Plus,
   Star,
   Store,
 } from 'lucide-react';
 import { SHOP_CONFIG, ViewMode } from '../config/shopConfig';
+import { useAdminAuth } from '../context/AdminAuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import {
   CATALOG_PRODUCTS,
@@ -19,46 +22,81 @@ import {
   SITE_IMAGES,
   SitePage,
 } from '../data/catalogData';
-import { LiveCustomerReview } from '../hooks/useLiveStoreData';
+import {
+  DEFAULT_HOME_SECTIONS,
+  HomeSectionsConfig,
+  LiveCustomerReview,
+  SiteMediaOverride,
+} from '../hooks/useLiveStoreData';
+import {
+  AdminHomeSectionPickerModal,
+  AdminShowcaseCardModal,
+  EditableShowcaseCard,
+  HomeSectionKey,
+} from './AdminHomeEditors';
+import {
+  AdminImageControls,
+  AdminProductEditTrigger,
+} from './AdminInlineControls';
 import { CustomerReviewsSection } from './CustomerReviewsSection';
 import { ResilientImage } from './ResilientImage';
 
 interface HomePageProps {
   products?: CatalogProduct[];
   liveReviews?: LiveCustomerReview[];
+  hiddenReviewIds?: string[];
+  reviewsVisible?: boolean;
+  homeSections?: HomeSectionsConfig;
   siteImages?: Record<keyof typeof SITE_IMAGES, string>;
+  mediaOverrides?: Record<string, SiteMediaOverride>;
   onNavigate: (page: SitePage, sectionHash?: string) => void;
   onBrowseCategory: (category: ProductCategory) => void;
   onOpenVirtualShop: (initialMode: ViewMode) => void;
   onInspectProduct: (product: CatalogProduct) => void;
   onQuickAddToCart: (product: CatalogProduct) => void;
+  onAdminEditProduct?: (product: CatalogProduct) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   products = CATALOG_PRODUCTS,
   liveReviews = [],
+  hiddenReviewIds = [],
+  reviewsVisible = true,
+  homeSections = DEFAULT_HOME_SECTIONS,
   siteImages = SITE_IMAGES,
+  mediaOverrides = {},
   onNavigate,
   onBrowseCategory,
   onOpenVirtualShop,
   onInspectProduct,
   onQuickAddToCart,
+  onAdminEditProduct,
 }) => {
   const { t, isUrdu } = useLanguage();
+  const { isAdmin } = useAdminAuth();
   const [addedId, setAddedId] = useState<string | null>(null);
   const [trendingOffset, setTrendingOffset] = useState(0);
   const [featuredOffset, setFeaturedOffset] = useState(0);
-  const [arrivalOffset, setArrivalOffset] = useState(4);
+  const [arrivalOffset, setArrivalOffset] = useState(0);
+  const [activePickerSection, setActivePickerSection] = useState<{
+    key: HomeSectionKey;
+    title: string;
+  } | null>(null);
+  const [editingShowcaseCard, setEditingShowcaseCard] =
+    useState<EditableShowcaseCard | null>(null);
 
-  const totalReviewCount = liveReviews.length + CUSTOMER_REVIEWS.length;
+  const visibleSeedCount = CUSTOMER_REVIEWS.filter(
+    (r) => !hiddenReviewIds.includes(`seed-${r.id}`),
+  ).length;
+  const totalReviewCount = liveReviews.length + visibleSeedCount;
   const averageRating =
     totalReviewCount > 0
       ? (
           (liveReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) +
-            CUSTOMER_REVIEWS.length * 5) /
+            visibleSeedCount * 5) /
           totalReviewCount
         ).toFixed(1)
-      : '4.9';
+      : '5.0';
 
   const catalogList = products.length > 0 ? products : CATALOG_PRODUCTS;
 
@@ -71,22 +109,58 @@ export const HomePage: React.FC<HomePageProps> = ({
     }, 1100);
   };
 
-  const getSlice = (offset: number, count: number): CatalogProduct[] => {
+  const resolveSectionPool = (
+    ids: string[],
+    fallback: CatalogProduct[],
+  ): CatalogProduct[] => {
+    if (!ids || ids.length === 0) return fallback;
+    const byId = new Map(catalogList.map((p) => [p.id, p]));
+    const resolved = ids
+      .map((id) => byId.get(id))
+      .filter((p): p is CatalogProduct => Boolean(p));
+    return resolved.length > 0 ? resolved : fallback;
+  };
+
+  const getSectionSlice = (
+    pool: CatalogProduct[],
+    offset: number,
+    count: number,
+  ): CatalogProduct[] => {
+    if (pool.length === 0) return [];
+    if (pool.length <= count) return pool;
+    const normalizedOffset = ((offset % pool.length) + pool.length) % pool.length;
     const result: CatalogProduct[] = [];
-    const safeCount = Math.min(count, catalogList.length);
-    for (let i = 0; i < safeCount; i++) {
-      result.push(catalogList[(offset + i) % catalogList.length]);
+    for (let i = 0; i < count; i++) {
+      result.push(pool[(normalizedOffset + i) % pool.length]);
     }
     return result;
   };
 
-  const trendingItems = getSlice(trendingOffset, 3);
-  const featuredItems = getSlice(featuredOffset, 4);
-  const arrivalItems = getSlice(arrivalOffset, 4);
+  const trendingPool = resolveSectionPool(homeSections.trendingIds, catalogList);
+  const featuredPool = resolveSectionPool(homeSections.featuredIds, catalogList);
+  const arrivalPool = resolveSectionPool(homeSections.newArrivalIds, catalogList);
+
+  const trendingItems = getSectionSlice(trendingPool, trendingOffset, 4);
+  const featuredItems = getSectionSlice(featuredPool, featuredOffset, 4);
+  const arrivalStartOffset =
+    homeSections.newArrivalIds.length > 0 ? arrivalOffset : arrivalOffset + 4;
+  const arrivalItems = getSectionSlice(arrivalPool, arrivalStartOffset, 4);
+
+  const airpodsTitle =
+    mediaOverrides.bentoAirpods?.title?.trim() || 'Awesome\nAirPods & Buds';
+  const smartwatchTitle =
+    mediaOverrides.bentoSmartwatch?.title?.trim() || 'Smart Watches\n& PTA Phones';
+  const audioTitle =
+    mediaOverrides.bentoAudioCollection?.title?.trim() ||
+    'Premium Audio & Headphone Collection';
+  const audioCaption =
+    mediaOverrides.bentoAudioCollection?.caption?.trim() ||
+    'Ronin R-9 wired handsfree, Bluetooth speakers, and wireless earbuds — sound-tested right at our counter before you pay.';
 
   const renderProductCard = (
     product: CatalogProduct,
     highlighted = false,
+    extraClassName = '',
   ) => {
     const isAdded = addedId === product.id;
     const discount = product.discountPercent ?? 25;
@@ -102,9 +176,10 @@ export const HomePage: React.FC<HomePageProps> = ({
           highlighted
             ? 'border border-[#EA4E1B]/70 shadow-xs'
             : 'border border-black/5 shadow-xs'
-        }`}
+        } ${extraClassName}`}
       >
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4] sm:aspect-square">
+          <AdminProductEditTrigger onClick={() => onAdminEditProduct?.(product)} />
           <ResilientImage
             src={product.image}
             alt={product.name}
@@ -236,14 +311,19 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             </div>
 
-            {/* Right Editorial Lifestyle Portrait + Floating Local Proof Card */}
+            {/* Right Editorial Shop Owner Portrait + Floating Local Proof Card */}
             <div className="relative flex items-end justify-center lg:col-span-6 lg:justify-end">
-              <div className="relative w-full max-w-[520px] overflow-hidden rounded-t-3xl bg-[#ECD8BE]">
+              <div className="relative w-full max-w-[560px] overflow-hidden rounded-t-3xl bg-[#ECD8BE]">
+                <AdminImageControls
+                  slotKey="heroLifestyle"
+                  label="Hero Photo"
+                  hasOverride={Boolean(mediaOverrides.heroLifestyle)}
+                />
                 <ResilientImage
                   src={siteImages.heroLifestyle}
-                  alt="Customer enjoying wireless audio headphones and smartphone from Usman Mobile"
+                  alt="Usman Sarwar inside Usman Mobile Repairing Centre with phone repair tools and accessories"
                   priority
-                  className="aspect-[4/3] w-full object-cover object-top"
+                  className="aspect-[4/3] w-full object-cover object-center"
                 />
                 {/* Soft left feathered blur + blend into sand canvas */}
                 <div className="pointer-events-none absolute inset-y-0 left-0 w-12 backdrop-blur-[2px] [-webkit-mask-image:linear-gradient(to_right,black_0%,transparent_100%)] [mask-image:linear-gradient(to_right,black_0%,transparent_100%)]" />
@@ -251,32 +331,35 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
 
               {/* Compact Floating Social Proof Card (jumps to live reviews) */}
-              <button
-                type="button"
-                onClick={() =>
-                  document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth' })
-                }
-                className="absolute bottom-5 left-2 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left shadow-lg transition hover:-translate-y-0.5 sm:left-6"
-              >
-                <p className={`text-[11px] font-bold text-[#141414] ${isUrdu ? 'font-urdu' : ''}`}>
-                  {t('Our Reviews', 'کسٹمر ریویوز')}
-                </p>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <div className="flex -space-x-2">
-                    {['MB', 'TM', 'SR'].map((initials) => (
-                      <span
-                        key={initials}
-                        className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#141414] text-[10px] font-bold text-white"
-                      >
-                        {initials}
-                      </span>
-                    ))}
+              {reviewsVisible && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('usman:open-reviews'));
+                    document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="absolute bottom-5 left-2 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left shadow-lg transition hover:-translate-y-0.5 sm:left-6"
+                >
+                  <p className={`text-[11px] font-bold text-[#141414] ${isUrdu ? 'font-urdu' : ''}`}>
+                    {t('Our Reviews', 'کسٹمر ریویوز')}
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex -space-x-2">
+                      {['MB', 'TM', 'SR'].map((initials) => (
+                        <span
+                          key={initials}
+                          className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#141414] text-[10px] font-bold text-white"
+                        >
+                          {initials}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-xs font-extrabold tabular-nums text-[#141414]">
+                      {averageRating} ★ · {totalReviewCount}+
+                    </span>
                   </div>
-                  <span className="text-xs font-extrabold tabular-nums text-[#141414]">
-                    {averageRating} ★ · {totalReviewCount}+
-                  </span>
-                </div>
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -285,14 +368,30 @@ export const HomePage: React.FC<HomePageProps> = ({
       {/* 2. Pure White Strip: Our Trending Products (Orange Left Block + 3 Product Cards) */}
       <section className="bg-white py-14 lg:py-16">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8">
-          <div className="mb-5 flex justify-end gap-2">
+          <div className="mb-5 flex items-center justify-end gap-2">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePickerSection({
+                    key: 'trendingIds',
+                    title: 'Our Trending Products',
+                  })
+                }
+                title="Add listed products to Trending"
+                aria-label="Add listed products to Trending"
+                className="inline-flex h-9 items-center gap-1 rounded-full bg-[#141414] px-3 text-xs font-bold text-white shadow-xs transition hover:bg-[#EA4E1B]"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Add</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() =>
-                setTrendingOffset(
-                  (prev) => (prev - 1 + catalogList.length) % catalogList.length,
-                )
-              }
+              onClick={() => {
+                const len = Math.max(1, trendingPool.length);
+                setTrendingOffset((prev) => (prev - 1 + len) % len);
+              }}
               aria-label="Previous trending products"
               className="grid h-9 w-9 place-items-center rounded-full border border-[#EA4E1B]/50 text-[#EA4E1B] transition-colors hover:bg-[#EA4E1B] hover:text-white"
             >
@@ -300,9 +399,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
             <button
               type="button"
-              onClick={() =>
-                setTrendingOffset((prev) => (prev + 1) % catalogList.length)
-              }
+              onClick={() => {
+                const len = Math.max(1, trendingPool.length);
+                setTrendingOffset((prev) => (prev + 1) % len);
+              }}
               aria-label="Next trending products"
               className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
             >
@@ -310,36 +410,55 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-5 md:grid-cols-2 lg:grid-cols-4">
-            {/* Signature Solid Burnt-Orange Anchor Card */}
-            <button
-              type="button"
-              onClick={() => onBrowseCategory('All')}
-              className="group col-span-2 flex min-h-[160px] flex-col justify-between rounded-2xl bg-[#EA4E1B] p-5 text-left text-white transition-colors hover:bg-[#d44212] sm:col-span-1 sm:min-h-[290px] sm:p-6"
-            >
-              <div>
-                <h2 className="font-display text-2xl font-extrabold leading-tight sm:text-[28px]">
-                  Our Trending Products
-                </h2>
-                <p className="mt-3 text-xs leading-relaxed text-white/85">
-                  Live-tested fast chargers, handsfree, AirPods &amp; covers stocked
-                  daily at our Main Bazar counter.
-                </p>
-              </div>
+          <div className="relative">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {/* Signature Solid Burnt-Orange Anchor Card */}
+              <button
+                type="button"
+                onClick={() => onBrowseCategory('All')}
+                className="group col-span-2 flex min-h-[160px] flex-col justify-between rounded-2xl bg-[#EA4E1B] p-5 text-left text-white transition-colors hover:bg-[#d44212] lg:col-span-1 lg:min-h-[290px] lg:p-6"
+              >
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold leading-tight sm:text-[28px]">
+                    Our Trending Products
+                  </h2>
+                  <p className="mt-3 text-xs leading-relaxed text-white/85">
+                    Live-tested fast chargers, handsfree, AirPods &amp; covers stocked
+                    daily at our Main Bazar counter.
+                  </p>
+                </div>
 
-              <div className="flex items-center justify-between pt-6">
-                <span className="text-xs font-semibold text-white/90">
-                  View full store
-                </span>
-                <ArrowUpRight
-                  className="h-6 w-6 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                  aria-hidden="true"
-                />
-              </div>
-            </button>
+                <div className="flex items-center justify-between pt-6">
+                  <span className="text-xs font-semibold text-white/90">
+                    View full store
+                  </span>
+                  <ArrowUpRight
+                    className="h-6 w-6 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                    aria-hidden="true"
+                  />
+                </div>
+              </button>
 
-            {trendingItems.map((product, idx) =>
-              renderProductCard(product, idx === 0),
+              {trendingItems.map((product, idx) =>
+                renderProductCard(product, idx === 0, idx === 3 ? 'lg:hidden' : ''),
+              )}
+            </div>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePickerSection({
+                    key: 'trendingIds',
+                    title: 'Our Trending Products',
+                  })
+                }
+                title="Add listed product to Trending"
+                aria-label="Add listed product to Trending"
+                className="grid absolute right-1 top-1/2 z-20 h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg ring-4 ring-white transition hover:scale-105 hover:bg-[#d44212] lg:-right-4 lg:h-11 lg:w-11"
+              >
+                <Plus className="h-5 w-5 stroke-[2.5]" aria-hidden="true" />
+              </button>
             )}
           </div>
         </div>
@@ -364,46 +483,33 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
 
         <div className="mt-8 space-y-5">
-          {/* Row 1: Full-Width White Showcase — Cases & 9D Glass */}
-          <div className="grid grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:p-10 md:grid-cols-12">
-            <div className="md:col-span-5">
-              <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414] sm:text-3xl">
-                Premium MagSafe &amp; Phone Cases Collection
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-                Shockproof armor covers &amp; 9D tempered glass fitted dust-free for
-                Infinix, Tecno, Samsung, Vivo, Oppo &amp; iPhone.
-              </p>
-              <button
-                type="button"
-                onClick={() => onBrowseCategory('Protection')}
-                className="mt-6 inline-flex h-10 items-center gap-2 rounded-full bg-[#EA4E1B] pr-1.5 pl-5 text-xs font-semibold text-white transition-colors hover:bg-[#d44212]"
-              >
-                <span>Shop Now</span>
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#EA4E1B]">
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </span>
-              </button>
-            </div>
-            <div className="md:col-span-7">
-              <div className="aspect-[16/9] w-full overflow-hidden rounded-xl bg-white">
-                <ResilientImage
-                  src={SITE_IMAGES.bentoCasesTrio}
-                  alt="Three MagSafe smartphone protective cases in black, white, and cream"
-                  className="h-full w-full object-contain"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Row 2: Two-Column Split — AirPods & Smart Watches */}
+          {/* Row 1: Two-Column Split — AirPods & Smart Watches */}
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <div className="grid grid-cols-1 items-center gap-4 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:grid-cols-12 sm:p-8">
+            <div className="relative grid grid-cols-1 items-center gap-4 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:grid-cols-12 sm:p-8">
               <div className="sm:col-span-6">
-                <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414]">
-                  Awesome
-                  <br />
-                  AirPods &amp; Buds
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingShowcaseCard({
+                        slotKey: 'bentoAirpods',
+                        defaultTitle: 'Awesome AirPods & Buds',
+                        currentTitle: airpodsTitle.replace(/\n/g, ' '),
+                        currentImage: siteImages.bentoAirpods,
+                        defaultImage: SITE_IMAGES.bentoAirpods,
+                        aspectClass: 'aspect-[4/3]',
+                        hasOverride: Boolean(mediaOverrides.bentoAirpods),
+                        showCaptionField: false,
+                      })
+                    }
+                    className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[#141414] px-3 py-1 text-[11px] font-bold text-white shadow-xs transition hover:bg-[#EA4E1B]"
+                  >
+                    <Edit3 className="h-3 w-3" aria-hidden="true" />
+                    <span>Edit Name &amp; Photo</span>
+                  </button>
+                )}
+                <h3 className="font-display whitespace-pre-line text-2xl font-extrabold leading-tight text-[#141414]">
+                  {airpodsTitle}
                 </h3>
                 <button
                   type="button"
@@ -417,22 +523,46 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </button>
               </div>
               <div className="sm:col-span-6">
-                <div className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                  <AdminImageControls
+                    slotKey="bentoAirpods"
+                    label="AirPods Photo"
+                    hasOverride={Boolean(mediaOverrides.bentoAirpods)}
+                  />
                   <ResilientImage
-                    src={SITE_IMAGES.bentoAirpods}
-                    alt="AirPods Pro wireless earbuds and stereo handsfree"
-                    className="h-full w-full object-cover"
+                    src={siteImages.bentoAirpods}
+                    alt={airpodsTitle}
+                    className="h-full w-full object-cover object-center"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 items-center gap-4 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:grid-cols-12 sm:p-8">
+            <div className="relative grid grid-cols-1 items-center gap-4 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:grid-cols-12 sm:p-8">
               <div className="sm:col-span-6">
-                <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414]">
-                  Smart Watches
-                  <br />
-                  &amp; PTA Phones
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingShowcaseCard({
+                        slotKey: 'bentoSmartwatch',
+                        defaultTitle: 'Smart Watches & PTA Phones',
+                        currentTitle: smartwatchTitle.replace(/\n/g, ' '),
+                        currentImage: siteImages.bentoSmartwatch,
+                        defaultImage: SITE_IMAGES.bentoSmartwatch,
+                        aspectClass: 'aspect-[4/3]',
+                        hasOverride: Boolean(mediaOverrides.bentoSmartwatch),
+                        showCaptionField: false,
+                      })
+                    }
+                    className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[#141414] px-3 py-1 text-[11px] font-bold text-white shadow-xs transition hover:bg-[#EA4E1B]"
+                  >
+                    <Edit3 className="h-3 w-3" aria-hidden="true" />
+                    <span>Edit Name &amp; Photo</span>
+                  </button>
+                )}
+                <h3 className="font-display whitespace-pre-line text-2xl font-extrabold leading-tight text-[#141414]">
+                  {smartwatchTitle}
                 </h3>
                 <button
                   type="button"
@@ -446,11 +576,16 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </button>
               </div>
               <div className="sm:col-span-6">
-                <div className="aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                  <AdminImageControls
+                    slotKey="bentoSmartwatch"
+                    label="Smartwatch Photo"
+                    hasOverride={Boolean(mediaOverrides.bentoSmartwatch)}
+                  />
                   <ResilientImage
-                    src={SITE_IMAGES.bentoSmartwatch}
-                    alt="Ultra calling smartwatch and modern PTA smartphone"
-                    className="h-full w-full object-cover"
+                    src={siteImages.bentoSmartwatch}
+                    alt={smartwatchTitle}
+                    className="h-full w-full object-cover object-center"
                   />
                 </div>
               </div>
@@ -458,14 +593,37 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           {/* Row 3: Full-Width White Showcase — Premium Audio Collection */}
-          <div className="grid grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:p-10 md:grid-cols-12">
+          <div className="relative grid grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-7 shadow-xs sm:p-10 md:grid-cols-12">
             <div className="md:col-span-5">
-              <h3 className="font-display text-2xl font-extrabold leading-tight text-[#141414] sm:text-3xl">
-                Premium Audio &amp; Headphone Collection
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditingShowcaseCard({
+                      slotKey: 'bentoAudioCollection',
+                      defaultTitle: 'Premium Audio & Headphone Collection',
+                      currentTitle: audioTitle,
+                      defaultCaption:
+                        'Ronin R-9 wired handsfree, Bluetooth speakers, and wireless earbuds — sound-tested right at our counter before you pay.',
+                      currentCaption: audioCaption,
+                      currentImage: siteImages.bentoAudioCollection,
+                      defaultImage: SITE_IMAGES.bentoAudioCollection,
+                      aspectClass: 'aspect-[16/9]',
+                      hasOverride: Boolean(mediaOverrides.bentoAudioCollection),
+                      showCaptionField: true,
+                    })
+                  }
+                  className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[#141414] px-3 py-1 text-[11px] font-bold text-white shadow-xs transition hover:bg-[#EA4E1B]"
+                >
+                  <Edit3 className="h-3 w-3" aria-hidden="true" />
+                  <span>Edit Name &amp; Photo</span>
+                </button>
+              )}
+              <h3 className="font-display whitespace-pre-line text-2xl font-extrabold leading-tight text-[#141414] sm:text-3xl">
+                {audioTitle}
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-                Ronin R-9 wired handsfree, Bluetooth speakers, and wireless earbuds —
-                sound-tested right at our counter before you pay.
+                {audioCaption}
               </p>
               <button
                 type="button"
@@ -479,11 +637,16 @@ export const HomePage: React.FC<HomePageProps> = ({
               </button>
             </div>
             <div className="md:col-span-7">
-              <div className="aspect-[16/9] w-full overflow-hidden rounded-xl bg-white">
+              <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                <AdminImageControls
+                  slotKey="bentoAudioCollection"
+                  label="Audio Collection Photo"
+                  hasOverride={Boolean(mediaOverrides.bentoAudioCollection)}
+                />
                 <ResilientImage
-                  src={SITE_IMAGES.bentoAudioCollection}
-                  alt="Wireless headphones and earbuds collection"
-                  className="h-full w-full object-contain"
+                  src={siteImages.bentoAudioCollection}
+                  alt={audioTitle}
+                  className="h-full w-full object-cover object-center"
                 />
               </div>
             </div>
@@ -532,6 +695,11 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
             <div className="md:col-span-6">
               <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-white">
+                <AdminImageControls
+                  slotKey="realInteriorCounter"
+                  label="Shop Interior Photo"
+                  hasOverride={Boolean(mediaOverrides.realInteriorCounter)}
+                />
                 <ResilientImage
                   src={siteImages.realInteriorCounter}
                   alt="Real interior view of Usman Mobile Repairing Centre counter and accessories wall"
@@ -553,13 +721,29 @@ export const HomePage: React.FC<HomePageProps> = ({
             Featured <span className="text-[#EA4E1B]">Products</span>
           </h2>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePickerSection({
+                    key: 'featuredIds',
+                    title: 'Featured Products',
+                  })
+                }
+                title="Add listed products to Featured Products"
+                aria-label="Add listed products to Featured Products"
+                className="inline-flex h-9 items-center gap-1 rounded-full bg-[#141414] px-3 text-xs font-bold text-white shadow-xs transition hover:bg-[#EA4E1B]"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Add</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() =>
-                setFeaturedOffset(
-                  (prev) => (prev - 1 + catalogList.length) % catalogList.length,
-                )
-              }
+              onClick={() => {
+                const len = Math.max(1, featuredPool.length);
+                setFeaturedOffset((prev) => (prev - 1 + len) % len);
+              }}
               aria-label="Previous featured products"
               className="grid h-9 w-9 place-items-center rounded-full border border-[#EA4E1B]/50 bg-white text-[#EA4E1B] transition-colors hover:bg-[#EA4E1B] hover:text-white"
             >
@@ -567,9 +751,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
             <button
               type="button"
-              onClick={() =>
-                setFeaturedOffset((prev) => (prev + 1) % catalogList.length)
-              }
+              onClick={() => {
+                const len = Math.max(1, featuredPool.length);
+                setFeaturedOffset((prev) => (prev + 1) % len);
+              }}
               aria-label="Next featured products"
               className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
             >
@@ -578,8 +763,27 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
-          {featuredItems.map((product) => renderProductCard(product))}
+        <div className="relative mt-5 sm:mt-6">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+            {featuredItems.map((product) => renderProductCard(product))}
+          </div>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() =>
+                setActivePickerSection({
+                  key: 'featuredIds',
+                  title: 'Featured Products',
+                })
+              }
+              title="Add listed product to Featured Products"
+              aria-label="Add listed product to Featured Products"
+              className="grid absolute right-1 top-1/2 z-20 h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg ring-4 ring-[#F3ECE6] transition hover:scale-105 hover:bg-[#d44212] lg:-right-4 lg:h-11 lg:w-11"
+            >
+              <Plus className="h-5 w-5 stroke-[2.5]" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </section>
 
@@ -590,13 +794,29 @@ export const HomePage: React.FC<HomePageProps> = ({
             New <span className="text-[#EA4E1B]">Arrival</span>
           </h2>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePickerSection({
+                    key: 'newArrivalIds',
+                    title: 'New Arrival',
+                  })
+                }
+                title="Add listed products to New Arrival"
+                aria-label="Add listed products to New Arrival"
+                className="inline-flex h-9 items-center gap-1 rounded-full bg-[#141414] px-3 text-xs font-bold text-white shadow-xs transition hover:bg-[#EA4E1B]"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Add</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() =>
-                setArrivalOffset(
-                  (prev) => (prev - 1 + catalogList.length) % catalogList.length,
-                )
-              }
+              onClick={() => {
+                const len = Math.max(1, arrivalPool.length);
+                setArrivalOffset((prev) => (prev - 1 + len) % len);
+              }}
               aria-label="Previous new arrivals"
               className="grid h-9 w-9 place-items-center rounded-full border border-[#EA4E1B]/50 bg-white text-[#EA4E1B] transition-colors hover:bg-[#EA4E1B] hover:text-white"
             >
@@ -604,9 +824,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             </button>
             <button
               type="button"
-              onClick={() =>
-                setArrivalOffset((prev) => (prev + 1) % catalogList.length)
-              }
+              onClick={() => {
+                const len = Math.max(1, arrivalPool.length);
+                setArrivalOffset((prev) => (prev + 1) % len);
+              }}
               aria-label="Next new arrivals"
               className="grid h-9 w-9 place-items-center rounded-full bg-[#EA4E1B] text-white transition-colors hover:bg-[#d44212]"
             >
@@ -615,13 +836,51 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
-          {arrivalItems.map((product) => renderProductCard(product))}
+        <div className="relative mt-5 sm:mt-6">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
+            {arrivalItems.map((product) => renderProductCard(product))}
+          </div>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() =>
+                setActivePickerSection({
+                  key: 'newArrivalIds',
+                  title: 'New Arrival',
+                })
+              }
+              title="Add listed product to New Arrival"
+              aria-label="Add listed product to New Arrival"
+              className="grid absolute right-1 top-1/2 z-20 h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-[#EA4E1B] text-white shadow-lg ring-4 ring-[#F3ECE6] transition hover:scale-105 hover:bg-[#d44212] lg:-right-4 lg:h-11 lg:w-11"
+            >
+              <Plus className="h-5 w-5 stroke-[2.5]" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </section>
 
-      {/* 6. Real Customer Reviews & Ratings (with 4-digit privacy & self-edit) */}
-      <CustomerReviewsSection liveReviews={liveReviews} compact />
+      {/* 6. Real Customer Reviews & Ratings (with 4-digit privacy, self-edit & admin show/hide/delete) */}
+      <CustomerReviewsSection
+        liveReviews={liveReviews}
+        hiddenReviewIds={hiddenReviewIds}
+        reviewsVisible={reviewsVisible}
+        compact
+      />
+
+      {/* Admin Modals for Home Product Rows (+) & Home Showcase Cards */}
+      <AdminHomeSectionPickerModal
+        sectionKey={activePickerSection?.key ?? null}
+        sectionTitle={activePickerSection?.title ?? ''}
+        allProducts={catalogList}
+        homeSections={homeSections}
+        onClose={() => setActivePickerSection(null)}
+      />
+
+      <AdminShowcaseCardModal
+        card={editingShowcaseCard}
+        onClose={() => setEditingShowcaseCard(null)}
+      />
     </div>
   );
 };

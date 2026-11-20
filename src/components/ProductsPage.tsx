@@ -10,6 +10,7 @@ import {
   ProductCategory,
 } from '../data/catalogData';
 import { matchesProductQuery } from '../utils/catalogSearch';
+import { AdminProductEditTrigger } from './AdminInlineControls';
 import { ResilientImage } from './ResilientImage';
 
 interface ProductsPageProps {
@@ -20,6 +21,7 @@ interface ProductsPageProps {
   onInspectProduct: (product: CatalogProduct) => void;
   onQuickAddToCart: (product: CatalogProduct) => void;
   onOpenVirtualShop: (mode: ViewMode) => void;
+  onAdminEditProduct?: (product: CatalogProduct) => void;
 }
 
 type SortOrder = 'featured' | 'price-asc' | 'price-desc';
@@ -32,6 +34,7 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
   onInspectProduct,
   onQuickAddToCart,
   onOpenVirtualShop,
+  onAdminEditProduct,
 }) => {
   const { t, isUrdu } = useLanguage();
   const [localSearchQuery, setLocalSearchQuery] = useState('');
@@ -249,6 +252,9 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                       alt={product.name}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                     />
+                    {onAdminEditProduct && (
+                      <AdminProductEditTrigger onClick={() => onAdminEditProduct(product)} />
+                    )}
                   </div>
 
                   <div className="flex flex-1 flex-col justify-between p-2 sm:p-3">
