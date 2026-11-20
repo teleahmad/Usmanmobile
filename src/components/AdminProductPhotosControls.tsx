@@ -8,10 +8,12 @@ import {
   Eye,
   EyeOff,
   Image as ImageIcon,
+  Images,
   Plus,
   RotateCcw,
   Save,
   Search,
+  Star,
   Trash2,
   Upload,
   X,
@@ -25,7 +27,7 @@ import {
   SiteMediaOverride,
   SiteMediaSlotConfig,
 } from '../hooks/useLiveStoreData';
-import { readFileAsDataUrl } from '../utils/imageUpload';
+import { compressImageFileToDataUrl, readFileAsDataUrl } from '../utils/imageUpload';
 import { ImageCropperModal } from './ImageCropperModal';
 import { ResilientImage } from './ResilientImage';
 
@@ -60,6 +62,7 @@ interface ProductFormState {
   warrantyNote: string;
   variantsText: string;
   image: string;
+  galleryImages: string[];
 }
 
 const DEFAULT_CATEGORIES: string[] = PRODUCT_CATEGORIES.filter((c) => c !== 'All');
@@ -76,9 +79,9 @@ function buildEmptyForm(): ProductFormState {
     pricePkr: '1000',
     originalPricePkr: '1400',
     discountPercent: '29',
-    rating: '4.9',
-    reviewsCount: '120',
-    soldCount: '500+ sold',
+    rating: '',
+    reviewsCount: '',
+    soldCount: '',
     status: 'In Stock',
     inStock: true,
     hidden: false,
@@ -89,6 +92,7 @@ function buildEmptyForm(): ProductFormState {
     warrantyNote: '7-day replacement check',
     variantsText: 'Standard',
     image: '',
+    galleryImages: [],
   };
 }
 
@@ -103,9 +107,9 @@ function formFromProduct(p: LiveCatalogProduct): ProductFormState {
     pricePkr: String(p.pricePkr),
     originalPricePkr: String(p.originalPricePkr ?? Math.round(p.pricePkr * 1.25)),
     discountPercent: String(p.discountPercent ?? 20),
-    rating: p.rating,
-    reviewsCount: String(p.reviewsCount ?? 250),
-    soldCount: p.soldCount ?? '1K+ sold',
+    rating: p.rating || '',
+    reviewsCount: p.reviewsCount && p.reviewsCount > 0 ? String(p.reviewsCount) : '',
+    soldCount: p.soldCount || '',
     status: p.status,
     inStock: p.inStock !== false,
     hidden: Boolean(p.hidden),
@@ -115,6 +119,7 @@ function formFromProduct(p: LiveCatalogProduct): ProductFormState {
     warrantyNote: p.warrantyNote,
     variantsText: (p.variants || ['Standard']).join(', '),
     image: p.image,
+    galleryImages: Array.isArray(p.galleryImages) ? p.galleryImages.slice(0, 5) : [],
   };
 }
 
@@ -133,6 +138,10 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
 
   // Free-form Cropper state
   const [cropSource, setCropSource] = useState<string | null>(null);
+
+  // Additional gallery photos state (products only)
+  const [galleryUrlDraft, setGalleryUrlDraft] = useState('');
+  const [uploadingGallery, setUploadingGallery] = useState(false);
 
   // In-app Delete confirmation modal state
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<LiveCatalogProduct | null>(null);
@@ -177,6 +186,7 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
   const handleStartEdit = (product: LiveCatalogProduct) => {
     setAddingCategory(false);
     setNewCategoryDraft('');
+    setGalleryUrlDraft('');
     setEditingForm(formFromProduct(product));
     setFeedbackMsg({
       text: `Loaded "${product.name}" for editing — update fields below and click Save Product Live.`,
@@ -188,6 +198,7 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
   const handleStartNewProduct = () => {
     setAddingCategory(false);
     setNewCategoryDraft('');
+    setGalleryUrlDraft('');
     setEditingForm(buildEmptyForm());
     scrollToEditor();
   };
@@ -225,6 +236,94 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
     }
   };
 
+  const handleGalleryFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    const remaining = Math.max(0, 5 - editingForm.galleryImages.length);
+    if (remaining === 0) {
+      setFeedbackMsg({
+        text: 'Maximum 5 extra gallery photos allowed per product.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setUploadingGallery(true);
+    setFeedbackMsg(null);
+    try {
+      const selected = files.slice(0, remaining);
+      const compressed: string[] = [];
+      for (const file of selected) {
+        const dataUrl = await compressImageFileToDataUrl(file, 800, 115_000);
+        compressed.push(dataUrl);
+      }
+      setEditingForm((prev) => ({
+        ...prev,
+        galleryImages: [...prev.galleryImages, ...compressed].slice(0, 5),
+      }));
+      setFeedbackMsg({
+        text: `Added ${compressed.length} gallery photo${compressed.length > 1 ? 's' : ''}! Click Save Product Live to publish.`,
+        type: 'success',
+      });
+    } catch (err) {
+      setFeedbackMsg({
+        text: err instanceof Error ? err.message : 'Failed to upload gallery photos.',
+        type: 'error',
+      });
+    } finally {
+      setUploadingGallery(false);
+    }
+  };
+
+  const handleAddGalleryUrl = () => {
+    const clean = galleryUrlDraft.trim();
+    if (!clean) return;
+    if (editingForm.galleryImages.length >= 5) {
+      setFeedbackMsg({
+        text: 'Maximum 5 extra gallery photos allowed per product.',
+        type: 'error',
+      });
+      return;
+    }
+    setEditingForm((prev) => ({
+      ...prev,
+      galleryImages: [...prev.galleryImages, clean].slice(0, 5),
+    }));
+    setGalleryUrlDraft('');
+  };
+
+  const handleSetGalleryAsDisplay = (index: number) => {
+    setEditingForm((prev) => {
+      const picked = prev.galleryImages[index];
+      if (!picked) return prev;
+      const nextGallery = [...prev.galleryImages];
+      const currentDisplay = prev.image.trim();
+      if (currentDisplay) {
+        nextGallery[index] = currentDisplay;
+      } else {
+        nextGallery.splice(index, 1);
+      }
+      return {
+        ...prev,
+        image: picked,
+        galleryImages: nextGallery.slice(0, 5),
+      };
+    });
+    setFeedbackMsg({
+      text: 'Display photo updated! Save the product to publish.',
+      type: 'success',
+    });
+  };
+
+  const handleRemoveGalleryImage = (index: number) => {
+    setEditingForm((prev) => ({
+      ...prev,
+      galleryImages: prev.galleryImages.filter((_, i) => i !== index),
+    }));
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -250,6 +349,19 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
 
     const safeId = editingForm.id.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80);
 
+    const cleanGallery = editingForm.galleryImages
+      .map((u) => u.trim())
+      .filter((u) => u.length > 0)
+      .slice(0, 5);
+
+    if (cleanGallery.some((u) => u.length > 200_000)) {
+      setFeedbackMsg({
+        text: 'One of the gallery photos is too large. Please remove and re-upload it.',
+        type: 'error',
+      });
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       sku: editingForm.sku.trim().slice(0, 40) || `UM-${safeId.slice(0, 6).toUpperCase()}`,
       shopItemKey: editingForm.shopItemKey.trim().slice(0, 60) || cleanName.slice(0, 60),
@@ -258,9 +370,9 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
       pricePkr: priceNum,
       originalPricePkr: origNum,
       discountPercent: calcDiscount,
-      rating: editingForm.rating.trim().slice(0, 10) || '4.9',
+      rating: editingForm.rating.trim().slice(0, 10),
       reviewsCount: Math.max(0, Number(editingForm.reviewsCount) || 0),
-      soldCount: editingForm.soldCount.trim().slice(0, 30) || '500+ sold',
+      soldCount: editingForm.soldCount.trim().slice(0, 30),
       status:
         editingForm.status.trim().slice(0, 40) ||
         (editingForm.inStock ? 'In Stock' : 'Out of Stock'),
@@ -271,6 +383,7 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
       description: editingForm.description.trim().slice(0, 1000),
       warrantyNote: editingForm.warrantyNote.trim().slice(0, 120),
       variants: variants.length > 0 ? variants : ['Standard'],
+      galleryImages: cleanGallery,
       updatedAt: new Date().toISOString(),
     };
 
@@ -522,65 +635,172 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
         </div>
 
         <form onSubmit={handleSaveProduct} className="mt-5 space-y-5">
-          {/* Photo Upload + Free-Form Crop Row */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl bg-[#F8F6F4] p-4 border border-black/5">
-            <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
-              {editingForm.image ? (
-                <ResilientImage
-                  src={editingForm.image}
-                  alt="Preview"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                  <ImageIcon className="h-7 w-7" />
-                </div>
-              )}
+          {/* Display Photo (Main Card Image) + Free-Form Crop Row */}
+          <div className="space-y-3 rounded-2xl bg-[#F8F6F4] p-4 border border-black/5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-[#141414]">
+                <Star className="h-3.5 w-3.5 fill-[#EA4E1B] text-[#EA4E1B]" />
+                <span>Display Photo (Main Card Thumbnail)</span>
+              </span>
+              <span className="text-[11px] text-neutral-500">
+                Main picture shown on product cards &amp; cart
+              </span>
             </div>
 
-            <div className="flex-1 space-y-2 w-full">
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-[#141414] px-4 py-2 text-xs font-bold text-white transition hover:bg-neutral-800">
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>Upload &amp; Crop Photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="hidden"
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
+                {editingForm.image ? (
+                  <ResilientImage
+                    src={editingForm.image}
+                    alt="Display Photo Preview"
+                    className="h-full w-full object-cover"
                   />
-                </label>
-
-                {editingForm.image && (
-                  <button
-                    type="button"
-                    onClick={() => setCropSource(editingForm.image)}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#EA4E1B] bg-white px-3.5 py-2 text-xs font-bold text-[#EA4E1B] transition hover:bg-[#EA4E1B] hover:text-white"
-                  >
-                    <Crop className="h-3.5 w-3.5" />
-                    <span>Free-Form Crop</span>
-                  </button>
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-neutral-400">
+                    <ImageIcon className="h-7 w-7" />
+                  </div>
                 )}
+              </div>
 
-                <span className="text-[11px] text-neutral-500">
-                  Drag corners freely to crop · Auto-compressed
+              <div className="flex-1 space-y-2 w-full">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-[#141414] px-4 py-2 text-xs font-bold text-white transition hover:bg-neutral-800">
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Upload &amp; Crop Display Pic</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileChange}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {editingForm.image && (
+                    <button
+                      type="button"
+                      onClick={() => setCropSource(editingForm.image)}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#EA4E1B] bg-white px-3.5 py-2 text-xs font-bold text-[#EA4E1B] transition hover:bg-[#EA4E1B] hover:text-white"
+                    >
+                      <Crop className="h-3.5 w-3.5" />
+                      <span>Free-Form Crop</span>
+                    </button>
+                  )}
+
+                  <span className="text-[11px] text-neutral-500">
+                    Drag corners freely to crop · Auto-compressed
+                  </span>
+                </div>
+
+                <input
+                  type="text"
+                  value={editingForm.image.startsWith('data:') ? '' : editingForm.image}
+                  onChange={(e) =>
+                    setEditingForm((prev) => ({ ...prev, image: e.target.value }))
+                  }
+                  placeholder={
+                    editingForm.image.startsWith('data:')
+                      ? 'Cropped/uploaded display photo ready (or paste image URL to replace)'
+                      : 'Or paste display photo URL (https://...)'
+                  }
+                  className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs text-[#141414] focus:border-[#EA4E1B] focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Product Photos (Multi-Image Upload — Products Only) */}
+          <div className="space-y-3 rounded-2xl border border-black/8 bg-neutral-50/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Images className="h-4 w-4 text-[#EA4E1B]" />
+                <span className="text-xs font-extrabold text-[#141414]">
+                  Additional Product Photos ({editingForm.galleryImages.length}/5)
                 </span>
               </div>
 
-              <input
-                type="text"
-                value={editingForm.image.startsWith('data:') ? '' : editingForm.image}
-                onChange={(e) =>
-                  setEditingForm((prev) => ({ ...prev, image: e.target.value }))
-                }
-                placeholder={
-                  editingForm.image.startsWith('data:')
-                    ? 'Cropped/uploaded photo ready (or paste image URL to replace)'
-                    : 'Or paste image URL (https://...)'
-                }
-                className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs text-[#141414] focus:border-[#EA4E1B] focus:outline-none"
-              />
+              <label
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-white transition ${
+                  uploadingGallery || editingForm.galleryImages.length >= 5
+                    ? 'bg-neutral-400 cursor-not-allowed'
+                    : 'bg-[#EA4E1B] hover:bg-[#d44212]'
+                }`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{uploadingGallery ? 'Uploading...' : 'Add More Photos'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={uploadingGallery || editingForm.galleryImages.length >= 5}
+                  onChange={handleGalleryFilesChange}
+                  className="hidden"
+                />
+              </label>
             </div>
+
+            {editingForm.galleryImages.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+                {editingForm.galleryImages.map((imgUrl, idx) => (
+                  <div
+                    key={`dash-gallery-${idx}`}
+                    className="relative overflow-hidden rounded-xl border border-black/10 bg-white shadow-xs"
+                  >
+                    <div className="aspect-square w-full overflow-hidden bg-neutral-100">
+                      <ResilientImage
+                        src={imgUrl}
+                        alt={`Additional product photo ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveGalleryImage(idx)}
+                      aria-label={`Remove gallery photo ${idx + 1}`}
+                      className="absolute top-1.5 right-1.5 grid h-6 w-6 place-items-center rounded-full bg-black/75 text-white transition hover:bg-red-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetGalleryAsDisplay(idx)}
+                      className="block w-full border-t border-black/8 bg-white px-2 py-1.5 text-center text-[11px] font-bold text-[#141414] transition hover:bg-[#EA4E1B] hover:text-white"
+                    >
+                      Set as Display
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-500">
+                Select multiple photos at once to show extra angles, box contents, or color
+                variants when customers open this product.
+              </p>
+            )}
+
+            {editingForm.galleryImages.length < 5 && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="url"
+                  value={galleryUrlDraft}
+                  onChange={(e) => setGalleryUrlDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddGalleryUrl();
+                    }
+                  }}
+                  placeholder="Or paste an additional photo URL (https://...)"
+                  className="flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs text-[#141414] focus:border-[#EA4E1B] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddGalleryUrl}
+                  className="shrink-0 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-[#141414] transition hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+                >
+                  + Add URL
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -710,40 +930,42 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
 
             <div>
               <label className="block text-[11px] font-bold text-neutral-700">
-                Sold Count Label
+                Sold Count (Optional — leave blank to hide)
               </label>
               <input
                 type="text"
                 maxLength={30}
                 value={editingForm.soldCount}
                 onChange={(e) => setEditingForm({ ...editingForm, soldCount: e.target.value })}
-                placeholder="e.g. 5.8K sold"
+                placeholder="Leave blank until you add real count"
                 className="mt-1 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs focus:border-[#EA4E1B] focus:bg-white focus:outline-none"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-neutral-700">
-                Rating (e.g. 4.9)
+                Rating (Optional — leave blank to hide)
               </label>
               <input
                 type="text"
                 maxLength={10}
                 value={editingForm.rating}
                 onChange={(e) => setEditingForm({ ...editingForm, rating: e.target.value })}
+                placeholder="e.g. 5.0 (optional)"
                 className="mt-1 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs focus:border-[#EA4E1B] focus:bg-white focus:outline-none"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-neutral-700">
-                Reviews Count
+                Reviews Count (Optional)
               </label>
               <input
                 type="number"
                 min={0}
                 value={editingForm.reviewsCount}
                 onChange={(e) => setEditingForm({ ...editingForm, reviewsCount: e.target.value })}
+                placeholder="0 (hidden if empty)"
                 className="mt-1 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs focus:border-[#EA4E1B] focus:bg-white focus:outline-none"
               />
             </div>
@@ -934,6 +1156,12 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
                       {product.hidden && (
                         <span className="rounded-xs bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold text-neutral-700">
                           Hidden
+                        </span>
+                      )}
+                      {product.galleryImages && product.galleryImages.length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded-xs bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                          <Images className="h-2.5 w-2.5" />
+                          <span>{product.galleryImages.length + 1} photos</span>
                         </span>
                       )}
                     </div>

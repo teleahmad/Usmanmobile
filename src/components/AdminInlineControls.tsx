@@ -3,12 +3,15 @@ import {
   Camera,
   Check,
   Edit3,
+  Images,
   LayoutDashboard,
   Link2,
   LogOut,
+  Plus,
   RotateCcw,
   Save,
   Shield,
+  Star,
   Trash2,
   Upload,
   X,
@@ -327,6 +330,7 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
 }) => {
   const { isAdmin } = useAdminAuth();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const galleryFileRef = useRef<HTMLInputElement | null>(null);
 
   const [name, setName] = useState(product?.name || '');
   const [category, setCategory] = useState(product?.category || 'Charging');
@@ -339,6 +343,8 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
   const [description, setDescription] = useState(product?.description || '');
   const [variantsText, setVariantsText] = useState((product?.variants || ['Standard']).join(', '));
   const [image, setImage] = useState(product?.image || '');
+  const [galleryImages, setGalleryImages] = useState<string[]>(product?.galleryImages || []);
+  const [galleryUrlInput, setGalleryUrlInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -357,6 +363,8 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
     setDescription(product.description);
     setVariantsText((product.variants || ['Standard']).join(', '));
     setImage(product.image);
+    setGalleryImages(Array.isArray(product.galleryImages) ? product.galleryImages.slice(0, 5) : []);
+    setGalleryUrlInput('');
     setConfirmDelete(false);
     setErrorMsg(null);
   }, [product]);
@@ -377,6 +385,66 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    const remaining = Math.max(0, 5 - galleryImages.length);
+    if (remaining === 0) {
+      setErrorMsg('You can add up to 5 extra gallery photos per product.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setErrorMsg(null);
+      const selected = files.slice(0, remaining);
+      const uploaded: string[] = [];
+      for (const file of selected) {
+        const dataUrl = await compressImageFileToDataUrl(file, 800, 115_000);
+        uploaded.push(dataUrl);
+      }
+      setGalleryImages((prev) => [...prev, ...uploaded].slice(0, 5));
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to process gallery image.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddGalleryUrl = () => {
+    const clean = galleryUrlInput.trim();
+    if (!clean) return;
+    if (galleryImages.length >= 5) {
+      setErrorMsg('Maximum 5 extra gallery photos allowed per product.');
+      return;
+    }
+    setGalleryImages((prev) => [...prev, clean].slice(0, 5));
+    setGalleryUrlInput('');
+    setErrorMsg(null);
+  };
+
+  const handleMakeGalleryPhotoDisplay = (idx: number) => {
+    const picked = galleryImages[idx];
+    if (!picked) return;
+    const prevDisplay = image.trim();
+    setImage(picked);
+    setGalleryImages((prev) => {
+      const next = [...prev];
+      if (prevDisplay) {
+        next[idx] = prevDisplay;
+      } else {
+        next.splice(idx, 1);
+      }
+      return next.slice(0, 5);
+    });
+  };
+
+  const handleRemoveGalleryPhoto = (idx: number) => {
+    setGalleryImages((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -401,6 +469,11 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
       setSaving(true);
       setErrorMsg(null);
 
+      const cleanGallery = galleryImages
+        .map((u) => u.trim())
+        .filter((u) => u.length > 0 && u.length <= 200_000)
+        .slice(0, 5);
+
       await setDoc(
         doc(db, 'products', product.id),
         {
@@ -411,9 +484,9 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
           pricePkr: numPrice,
           originalPricePkr: numOrig,
           discountPercent,
-          rating: product.rating || '4.9',
-          reviewsCount: product.reviewsCount ?? 150,
-          soldCount: product.soldCount || '500+ sold',
+          rating: product.rating || '',
+          reviewsCount: product.reviewsCount ?? 0,
+          soldCount: product.soldCount || '',
           status: inStock ? 'In Stock' : 'Out of Stock',
           inStock,
           hidden: false,
@@ -423,6 +496,7 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
           description: description.trim().slice(0, 1000),
           warrantyNote: product.warrantyNote || 'Live check at counter',
           image: image.trim(),
+          galleryImages: cleanGallery,
           variants: parsedVariants.length > 0 ? parsedVariants : ['Standard'],
           updatedAt: new Date().toISOString(),
         },
@@ -515,56 +589,165 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
         )}
 
         <form onSubmit={handleSave} className="mt-4 space-y-4">
-          {/* Product Image Preview + Upload / Change / Delete */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-black/8 bg-[#FAF5F0] p-3.5 sm:flex-row sm:items-center">
-            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
-              {image ? (
-                <ResilientImage src={image} alt={name} className="h-full w-full object-cover" />
-              ) : (
-                <div className="grid h-full w-full place-items-center text-neutral-300">
-                  <Camera className="h-7 w-7" />
-                </div>
-              )}
+          {/* Display Photo (Main Card Image) */}
+          <div className="space-y-2.5 rounded-2xl border border-black/8 bg-[#FAF5F0] p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#141414]">
+                <Star className="h-3.5 w-3.5 fill-[#EA4E1B] text-[#EA4E1B]" />
+                <span>Display Photo (Main Card Image)</span>
+              </span>
+              <span className="text-[10px] font-semibold text-neutral-500">
+                Shown on Home &amp; Products grid
+              </span>
             </div>
 
-            <div className="flex-1 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
+                {image ? (
+                  <ResilientImage src={image} alt={name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-neutral-300">
+                    <Camera className="h-7 w-7" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => fileRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#141414] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#EA4E1B]"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Upload Display Pic</span>
+                  </button>
+                  {image && (
+                    <button
+                      type="button"
+                      onClick={handleResetPhoto}
+                      className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Clear</span>
+                    </button>
+                  )}
+                </div>
+
                 <input
-                  ref={fileRef}
+                  type="text"
+                  value={image.startsWith('data:') ? '' : image}
+                  onChange={(e) => setImage(e.target.value)}
+                  placeholder="Or paste display photo URL here..."
+                  className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-1.5 text-xs text-[#141414] focus:border-[#EA4E1B] focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Product Gallery Photos (Products Only — up to 5) */}
+          <div className="space-y-3 rounded-2xl border border-black/8 bg-neutral-50/90 p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Images className="h-3.5 w-3.5 text-[#EA4E1B]" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#141414]">
+                  More Product Photos ({galleryImages.length}/5)
+                </span>
+              </div>
+
+              <div>
+                <input
+                  ref={galleryFileRef}
                   type="file"
                   accept="image/*"
-                  onChange={handlePhotoUpload}
+                  multiple
+                  onChange={handleGalleryUpload}
                   className="hidden"
                 />
                 <button
                   type="button"
-                  disabled={saving}
-                  onClick={() => fileRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#141414] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#EA4E1B]"
+                  disabled={saving || galleryImages.length >= 5}
+                  onClick={() => galleryFileRef.current?.click()}
+                  className="inline-flex items-center gap-1 rounded-full bg-[#EA4E1B] px-3 py-1 text-[11px] font-bold text-white transition hover:bg-[#d44212] disabled:opacity-45"
                 >
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>Upload / Change Photo</span>
+                  <Plus className="h-3 w-3" />
+                  <span>Add Photos</span>
                 </button>
-                {image && (
-                  <button
-                    type="button"
-                    onClick={handleResetPhoto}
-                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    <span>Clear Photo</span>
-                  </button>
-                )}
               </div>
-
-              <input
-                type="text"
-                value={image.startsWith('data:') ? '' : image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="Or paste image URL here..."
-                className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-1.5 text-xs text-[#141414] focus:border-[#EA4E1B] focus:outline-none"
-              />
             </div>
+
+            {galleryImages.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {galleryImages.map((imgUrl, idx) => (
+                  <div
+                    key={`inline-gallery-${idx}`}
+                    className="group relative overflow-hidden rounded-xl border border-black/10 bg-white"
+                  >
+                    <div className="aspect-square w-full overflow-hidden">
+                      <ResilientImage
+                        src={imgUrl}
+                        alt={`Gallery photo ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveGalleryPhoto(idx)}
+                      aria-label={`Remove photo ${idx + 1}`}
+                      className="absolute top-1 right-1 grid h-5 w-5 place-items-center rounded-full bg-black/75 text-white hover:bg-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMakeGalleryPhotoDisplay(idx)}
+                      title="Make this the Display Photo"
+                      className="block w-full border-t border-black/8 bg-white px-1 py-1 text-center text-[10px] font-bold text-[#141414] transition hover:bg-[#EA4E1B] hover:text-white"
+                    >
+                      Set Display
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-neutral-500">
+                Upload extra angles or color photos here. Customers can swipe through all photos
+                when opening this product.
+              </p>
+            )}
+
+            {galleryImages.length < 5 && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="url"
+                  value={galleryUrlInput}
+                  onChange={(e) => setGalleryUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddGalleryUrl();
+                    }
+                  }}
+                  placeholder="Or paste extra photo URL..."
+                  className="flex-1 rounded-xl border border-neutral-300 bg-white px-3 py-1.5 text-xs text-[#141414] focus:border-[#EA4E1B] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddGalleryUrl}
+                  className="shrink-0 rounded-xl border border-black/15 bg-white px-3 py-1.5 text-[11px] font-bold text-[#141414] hover:border-[#EA4E1B] hover:text-[#EA4E1B]"
+                >
+                  + Add
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

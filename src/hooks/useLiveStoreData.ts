@@ -109,6 +109,7 @@ interface FirestoreProductDoc {
   description?: string;
   warrantyNote?: string;
   image?: string;
+  galleryImages?: string[];
   variants?: string[];
 }
 
@@ -229,6 +230,9 @@ export function useLiveStoreData() {
             slim[id] = {
               ...docData,
               image: img && img.length > 60_000 ? undefined : img,
+              galleryImages: Array.isArray(docData.galleryImages)
+                ? docData.galleryImages.filter((g) => typeof g === 'string' && g.length <= 60_000)
+                : undefined,
             };
           });
           writeJsonCache(PRODUCTS_CACHE_KEY, slim);
@@ -438,10 +442,10 @@ export function useLiveStoreData() {
                 : base.discountPercent,
             rating: override.rating || base.rating,
             reviewsCount:
-              typeof override.reviewsCount === 'number'
+              typeof override.reviewsCount === 'number' && override.reviewsCount > 0
                 ? override.reviewsCount
-                : base.reviewsCount,
-            soldCount: override.soldCount || base.soldCount,
+                : undefined,
+            soldCount: override.soldCount?.trim() || undefined,
             status: override.status || (inStock ? base.status : 'Out of Stock'),
             inStock,
             hidden: Boolean(override.hidden),
@@ -450,6 +454,9 @@ export function useLiveStoreData() {
             description: override.description || base.description,
             warrantyNote: override.warrantyNote || base.warrantyNote,
             image: override.image || (productsReady ? base.image : ''),
+            galleryImages: Array.isArray(override.galleryImages)
+              ? override.galleryImages.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+              : undefined,
             variants:
               Array.isArray(override.variants) && override.variants.length > 0
                 ? override.variants
@@ -486,9 +493,12 @@ export function useLiveStoreData() {
           pricePkr,
           originalPricePkr,
           discountPercent,
-          rating: data.rating || '4.9',
-          reviewsCount: typeof data.reviewsCount === 'number' ? data.reviewsCount : 120,
-          soldCount: data.soldCount || '500+ sold',
+          rating: data.rating?.trim() || '',
+          reviewsCount:
+            typeof data.reviewsCount === 'number' && data.reviewsCount > 0
+              ? data.reviewsCount
+              : undefined,
+          soldCount: data.soldCount?.trim() || undefined,
           status: data.status || (inStock ? 'In Stock' : 'Out of Stock'),
           inStock,
           hidden: Boolean(data.hidden),
@@ -499,6 +509,9 @@ export function useLiveStoreData() {
             'Available for pickup at Usman Mobile Repairing Centre or local delivery in Chak No. 8 & Pattoki.',
           warrantyNote: data.warrantyNote || 'Live check at counter',
           image: data.image || (productsReady ? SITE_IMAGES.realInteriorCounter : ''),
+          galleryImages: Array.isArray(data.galleryImages)
+            ? data.galleryImages.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+            : undefined,
           variants:
             Array.isArray(data.variants) && data.variants.length > 0
               ? data.variants

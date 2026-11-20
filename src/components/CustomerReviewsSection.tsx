@@ -14,7 +14,6 @@ import {
 import { deleteDoc, doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { CUSTOMER_REVIEWS } from '../data/catalogData';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { LiveCustomerReview } from '../hooks/useLiveStoreData';
 import {
@@ -150,32 +149,35 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
     }
   };
 
-  // Merge live Firestore reviews with non-deleted baseline shop reviews
+  // Show ONLY genuine live Firestore reviews (zero fake/seed reviews)
   const combinedReviews = useMemo(() => {
     const hiddenSet = new Set(hiddenReviewIds);
-    const baseline: LiveCustomerReview[] = CUSTOMER_REVIEWS.map((r, idx) => ({
-      id: `seed-${r.id}`,
-      customerName: r.name,
-      maskedPhone: idx === 0 ? '••••••4192' : idx === 1 ? '••••••7830' : '••••••6045',
-      rating: 5,
-      service: `${r.service} · ${r.location}`,
-      comment: r.quote,
-      createdAt: '2026-10-01T10:00:00.000Z',
-      updatedAt: '2026-10-01T10:00:00.000Z',
-      isSeed: true,
-    })).filter((item) => !hiddenSet.has(item.id));
-    return [...liveReviews, ...baseline];
+    return liveReviews.filter((item) => !hiddenSet.has(item.id));
   }, [liveReviews, hiddenReviewIds]);
 
   const stats = useMemo(() => {
     const total = combinedReviews.length;
-    if (total === 0) return { average: '5.0', total: 0 };
+    if (total === 0) return { average: null as string | null, total: 0 };
     const sum = combinedReviews.reduce((acc, r) => acc + (Number(r.rating) || 5), 0);
     return {
       average: (sum / total).toFixed(1),
       total,
     };
   }, [combinedReviews]);
+
+  const topInitials = useMemo(
+    () =>
+      combinedReviews.slice(0, 3).map((r) =>
+        r.customerName
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => w[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() || 'UM',
+      ),
+    [combinedReviews],
+  );
 
   const resetForm = () => {
     setCustomerName('');
@@ -477,24 +479,35 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
               <span className="text-[#EA4E1B]">{t('Reviews & Ratings', 'رائے اور ریٹنگ')}</span>
             </h2>
             <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-xs text-neutral-600">
-              <div className="flex -space-x-2">
-                {['MB', 'TM', 'SR'].map((initials) => (
-                  <span
-                    key={initials}
-                    className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-[#141414] text-[9px] font-bold text-white"
-                  >
-                    {initials}
+              {stats.total > 0 ? (
+                <>
+                  <div className="flex -space-x-2">
+                    {topInitials.map((initials, idx) => (
+                      <span
+                        key={`${initials}-${idx}`}
+                        className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-[#141414] text-[9px] font-bold text-white"
+                      >
+                        {initials}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="inline-flex items-center gap-1 font-extrabold tabular-nums text-[#141414]">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                    {stats.average} / 5.0
                   </span>
-                ))}
-              </div>
-              <span className="inline-flex items-center gap-1 font-extrabold tabular-nums text-[#141414]">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
-                {stats.average} / 5.0
-              </span>
-              <span aria-hidden="true">·</span>
-              <span className="tabular-nums font-semibold text-neutral-700">
-                {stats.total} {t('reviews', 'ریویوز')}
-              </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums font-semibold text-neutral-700">
+                    {stats.total} {t(stats.total === 1 ? 'genuine review' : 'genuine reviews', 'ریویوز')}
+                  </span>
+                </>
+              ) : (
+                <span className={`font-semibold text-neutral-600 ${isUrdu ? 'font-urdu' : ''}`}>
+                  {t(
+                    'No customer reviews yet — be the first to share your honest experience!',
+                    'ابھی کوئی ریویو نہیں — اپنا حقیقی تجربہ سب سے پہلے شیئر کریں!',
+                  )}
+                </span>
+              )}
               <span aria-hidden="true" className="hidden sm:inline">·</span>
               <span className={`hidden sm:inline ${isUrdu ? 'font-urdu' : ''}`}>
                 {t('Phone privacy: last 4 digits only', 'پرائیویسی: نمبر کے صرف آخری 4 ہندسے')}
@@ -819,6 +832,30 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
       )}
 
       {/* Live Reviews Grid */}
+      {visibleReviews.length === 0 ? (
+        <div className="mt-2 rounded-2xl border border-dashed border-black/15 bg-[#FAF7F4] px-6 py-10 text-center">
+          <Star className="mx-auto h-7 w-7 text-amber-400" aria-hidden="true" />
+          <p className={`mt-2.5 text-sm font-bold text-[#141414] ${isUrdu ? 'font-urdu' : ''}`}>
+            {t('No reviews yet', 'ابھی کوئی ریویو موجود نہیں')}
+          </p>
+          <p className={`mt-1 text-xs text-neutral-500 ${isUrdu ? 'font-urdu' : ''}`}>
+            {t(
+              'We only display real, genuine feedback from customers who visit Usman Mobile.',
+              'ہم صرف حقیقی کسٹمرز کے سچے ریویوز دکھاتے ہیں۔',
+            )}
+          </p>
+          {!formOpen && (
+            <button
+              type="button"
+              onClick={openWriteForm}
+              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-full bg-[#EA4E1B] px-5 text-xs font-bold text-white hover:bg-[#d44212]"
+            >
+              <Star className="h-3.5 w-3.5 fill-white" aria-hidden="true" />
+              <span>{t('Write First Review', 'پہلا ریویو لکھیں')}</span>
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {visibleReviews.map((review) => {
           const initials = review.customerName
@@ -942,6 +979,7 @@ export const CustomerReviewsSection: React.FC<CustomerReviewsSectionProps> = ({
           );
         })}
       </div>
+      )}
 
               {/* Smooth Bottom Hide Reviews Pill */}
               <div className="mt-6 flex justify-center border-t border-black/6 pt-5">

@@ -34,7 +34,7 @@ service cloud.firestore {
                'sku', 'shopItemKey', 'name', 'category', 'pricePkr', 'originalPricePkr',
                'discountPercent', 'rating', 'reviewsCount', 'soldCount', 'status',
                'inStock', 'hidden', 'deleted', 'featured', 'specs', 'description', 'warrantyNote',
-               'image', 'variants', 'createdAt', 'updatedAt'
+               'image', 'galleryImages', 'variants', 'createdAt', 'updatedAt'
              ]) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
@@ -53,6 +53,7 @@ service cloud.firestore {
              (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
              (!('warrantyNote' in data) || (data.warrantyNote is string && data.warrantyNote.size() <= 120)) &&
              (!('image' in data) || (data.image is string && data.image.size() <= 350000)) &&
+             (!('galleryImages' in data) || (data.galleryImages is list && data.galleryImages.size() <= 5 && (data.galleryImages.size() == 0 || (data.galleryImages[0] is string && data.galleryImages[0].size() <= 200000)))) &&
              (!('variants' in data) || (data.variants is list && data.variants.size() <= 10));
     }
 

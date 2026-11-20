@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Search, Star, Store, X } from 'lucide-react';
+import { Check, Images, Search, Star, Store, X } from 'lucide-react';
 import { ViewMode } from '../config/shopConfig';
 import { useLanguage } from '../context/LanguageContext';
 import {
@@ -236,8 +236,10 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
               const isAdded = addedId === product.id;
               const discount = product.discountPercent ?? 25;
               const original = product.originalPricePkr ?? Math.round(product.pricePkr * 1.35);
-              const reviews = product.reviewsCount ?? 450;
-              const sold = product.soldCount ?? '2.5K sold';
+              const hasRating = Boolean(product.rating?.trim());
+              const reviews = product.reviewsCount && product.reviewsCount > 0 ? product.reviewsCount : null;
+              const sold = product.soldCount?.trim() || null;
+              const extraPhotosCount = product.galleryImages?.length ?? 0;
 
               return (
                 <article
@@ -252,6 +254,12 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                       alt={product.name}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                     />
+                    {extraPhotosCount > 0 && (
+                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-xs">
+                        <Images className="h-2.5 w-2.5" aria-hidden="true" />
+                        <span>{extraPhotosCount + 1}</span>
+                      </span>
+                    )}
                     {onAdminEditProduct && (
                       <AdminProductEditTrigger onClick={() => onAdminEditProduct(product)} />
                     )}
@@ -283,17 +291,27 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                         </span>
                       </div>
 
-                      {/* Star Rating, Reviews Count & Sold Count */}
-                      <div className="mt-1 flex items-center gap-0.5 text-[9px] text-neutral-500 sm:mt-1.5 sm:gap-1 sm:text-[11px]">
-                        <Star
-                          className="h-2.5 w-2.5 shrink-0 fill-amber-400 text-amber-400 sm:h-3 sm:w-3"
-                          aria-hidden="true"
-                        />
-                        <span className="font-bold text-neutral-700">{product.rating}</span>
-                        <span className="text-neutral-400">({reviews})</span>
-                        <span className="text-neutral-300">|</span>
-                        <span className="truncate font-medium text-neutral-600">{sold}</span>
-                      </div>
+                      {/* Genuine Rating / Sold Count (shown only when set) or Stock Badge */}
+                      {(hasRating || reviews || sold) ? (
+                        <div className="mt-1 flex items-center gap-0.5 text-[9px] text-neutral-500 sm:mt-1.5 sm:gap-1 sm:text-[11px]">
+                          {hasRating && (
+                            <>
+                              <Star
+                                className="h-2.5 w-2.5 shrink-0 fill-amber-400 text-amber-400 sm:h-3 sm:w-3"
+                                aria-hidden="true"
+                              />
+                              <span className="font-bold text-neutral-700">{product.rating}</span>
+                            </>
+                          )}
+                          {reviews && <span className="text-neutral-400">({reviews})</span>}
+                          {(hasRating || reviews) && sold && <span className="text-neutral-300">|</span>}
+                          {sold && <span className="truncate font-medium text-neutral-600">{sold}</span>}
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-[9px] font-semibold text-emerald-700 sm:mt-1.5 sm:text-[11px]">
+                          {product.status}
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Add visible on desktop, while mobile taps card to open details + Add to Cart */}

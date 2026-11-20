@@ -6,6 +6,7 @@ import {
   Check,
   Compass,
   Edit3,
+  Images,
   Plus,
   Star,
   Store,
@@ -16,7 +17,6 @@ import { useLanguage } from '../context/LanguageContext';
 import {
   CATALOG_PRODUCTS,
   CatalogProduct,
-  CUSTOMER_REVIEWS,
   formatPkr,
   ProductCategory,
   SITE_IMAGES,
@@ -85,18 +85,24 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [editingShowcaseCard, setEditingShowcaseCard] =
     useState<EditableShowcaseCard | null>(null);
 
-  const visibleSeedCount = CUSTOMER_REVIEWS.filter(
-    (r) => !hiddenReviewIds.includes(`seed-${r.id}`),
-  ).length;
-  const totalReviewCount = liveReviews.length + visibleSeedCount;
+  const genuineReviews = liveReviews.filter((r) => !hiddenReviewIds.includes(r.id));
+  const totalReviewCount = genuineReviews.length;
   const averageRating =
     totalReviewCount > 0
       ? (
-          (liveReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) +
-            visibleSeedCount * 5) /
+          genuineReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) /
           totalReviewCount
         ).toFixed(1)
-      : '5.0';
+      : null;
+  const reviewerInitials = genuineReviews.slice(0, 3).map((r) =>
+    r.customerName
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'UM',
+  );
 
   const catalogList = products.length > 0 ? products : CATALOG_PRODUCTS;
 
@@ -165,8 +171,10 @@ export const HomePage: React.FC<HomePageProps> = ({
     const isAdded = addedId === product.id;
     const discount = product.discountPercent ?? 25;
     const original = product.originalPricePkr ?? Math.round(product.pricePkr * 1.35);
-    const reviews = product.reviewsCount ?? 450;
-    const sold = product.soldCount ?? '2.5K sold';
+    const hasRating = Boolean(product.rating?.trim());
+    const reviews = product.reviewsCount && product.reviewsCount > 0 ? product.reviewsCount : null;
+    const sold = product.soldCount?.trim() || null;
+    const extraPhotosCount = product.galleryImages?.length ?? 0;
 
     return (
       <article
@@ -185,6 +193,12 @@ export const HomePage: React.FC<HomePageProps> = ({
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
           />
+          {extraPhotosCount > 0 && (
+            <span className="pointer-events-none absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-xs">
+              <Images className="h-2.5 w-2.5" aria-hidden="true" />
+              <span>{extraPhotosCount + 1}</span>
+            </span>
+          )}
         </div>
 
         <div className="flex flex-1 flex-col justify-between p-2.5 sm:p-3.5">
@@ -206,16 +220,26 @@ export const HomePage: React.FC<HomePageProps> = ({
               {formatPkr(original)}
             </div>
 
-            <div className="mt-1 flex items-center gap-0.5 text-[9px] text-neutral-500 sm:mt-1.5 sm:gap-1 sm:text-[11px]">
-              <Star
-                className="h-2.5 w-2.5 shrink-0 fill-amber-400 text-amber-400 sm:h-3 sm:w-3"
-                aria-hidden="true"
-              />
-              <span className="font-bold text-neutral-700">{product.rating}</span>
-              <span className="text-neutral-400">({reviews})</span>
-              <span className="text-neutral-300">|</span>
-              <span className="truncate font-medium text-neutral-600">{sold}</span>
-            </div>
+            {(hasRating || reviews || sold) ? (
+              <div className="mt-1 flex items-center gap-0.5 text-[9px] text-neutral-500 sm:mt-1.5 sm:gap-1 sm:text-[11px]">
+                {hasRating && (
+                  <>
+                    <Star
+                      className="h-2.5 w-2.5 shrink-0 fill-amber-400 text-amber-400 sm:h-3 sm:w-3"
+                      aria-hidden="true"
+                    />
+                    <span className="font-bold text-neutral-700">{product.rating}</span>
+                  </>
+                )}
+                {reviews && <span className="text-neutral-400">({reviews})</span>}
+                {(hasRating || reviews) && sold && <span className="text-neutral-300">|</span>}
+                {sold && <span className="truncate font-medium text-neutral-600">{sold}</span>}
+              </div>
+            ) : (
+              <div className="mt-1 text-[9px] font-semibold text-emerald-700 sm:mt-1.5 sm:text-[11px]">
+                {product.status}
+              </div>
+            )}
           </div>
 
           <div className="mt-2.5 hidden border-t border-black/5 pt-2 sm:block">
@@ -343,21 +367,28 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <p className={`text-[11px] font-bold text-[#141414] ${isUrdu ? 'font-urdu' : ''}`}>
                     {t('Our Reviews', 'کسٹمر ریویوز')}
                   </p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="flex -space-x-2">
-                      {['MB', 'TM', 'SR'].map((initials) => (
-                        <span
-                          key={initials}
-                          className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#141414] text-[10px] font-bold text-white"
-                        >
-                          {initials}
-                        </span>
-                      ))}
+                  {totalReviewCount > 0 && averageRating ? (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex -space-x-2">
+                        {reviewerInitials.map((initials, idx) => (
+                          <span
+                            key={`${initials}-${idx}`}
+                            className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-[#141414] text-[10px] font-bold text-white"
+                          >
+                            {initials}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-xs font-extrabold tabular-nums text-[#141414]">
+                        {averageRating} ★ · {totalReviewCount}
+                      </span>
                     </div>
-                    <span className="text-xs font-extrabold tabular-nums text-[#141414]">
-                      {averageRating} ★ · {totalReviewCount}+
-                    </span>
-                  </div>
+                  ) : (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-[#EA4E1B]">
+                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" aria-hidden="true" />
+                      <span>{t('Write a review', 'ریویو لکھیں')}</span>
+                    </div>
+                  )}
                 </button>
               )}
             </div>

@@ -43,6 +43,7 @@ export interface CatalogProduct {
   description: string;
   warrantyNote: string;
   image: string;
+  galleryImages?: string[];
   variants: string[];
   featured?: boolean;
   freeDelivery?: boolean;
@@ -119,9 +120,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 1650,
     originalPricePkr: 2200,
     discountPercent: 25,
-    rating: '5.0',
-    reviewsCount: 563,
-    soldCount: '5.8K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: 'USB-C PD & USB-A · Over-Voltage Protection · 1.2m Cable',
@@ -141,9 +140,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 650,
     originalPricePkr: 950,
     discountPercent: 32,
-    rating: '4.9',
-    reviewsCount: 840,
-    soldCount: '8.2K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: '3.5mm Gold-Plated Jack · Inline Call Mic · Metal Earbuds',
@@ -163,9 +160,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 2850,
     originalPricePkr: 3800,
     discountPercent: 25,
-    rating: '5.0',
-    reviewsCount: 412,
-    soldCount: '3.1K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: 'Bluetooth 5.3 · Touch Controls · 24H Backup Case',
@@ -185,9 +180,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 450,
     originalPricePkr: 750,
     discountPercent: 40,
-    rating: '4.9',
-    reviewsCount: 1150,
-    soldCount: '12.4K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: '6A Super Fast Charge · 1.2m Nylon Weave · Metal Connectors',
@@ -207,9 +200,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 550,
     originalPricePkr: 900,
     discountPercent: 39,
-    rating: '5.0',
-    reviewsCount: 680,
-    soldCount: '6.7K sold',
+    rating: '',
     freeDelivery: true,
     status: 'All Models',
     specs: 'Raised Camera Lip · Corner Bumpers · Matte Grip',
@@ -229,9 +220,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 300,
     originalPricePkr: 500,
     discountPercent: 40,
-    rating: '5.0',
-    reviewsCount: 1620,
-    soldCount: '18.9K sold',
+    rating: '',
     freeDelivery: true,
     status: 'Free Fitting',
     specs: '9H Scratch Resistant · Edge-to-Edge Black Frame · Zero Halo',
@@ -251,9 +240,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 4400,
     originalPricePkr: 5500,
     discountPercent: 20,
-    rating: '4.9',
-    reviewsCount: 295,
-    soldCount: '2.4K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: 'Dual USB + Type-C PD · LED Indicator · Aluminum Shell',
@@ -273,9 +260,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 3250,
     originalPricePkr: 3850,
     discountPercent: 16,
-    rating: '4.8',
-    reviewsCount: 180,
-    soldCount: '1.5K sold',
+    rating: '',
     freeDelivery: true,
     status: 'PTA Approved',
     specs: 'Dual SIM · 3000mAh Multi-Day Battery · Torch & Wireless FM',
@@ -295,9 +280,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 1850,
     originalPricePkr: 2400,
     discountPercent: 23,
-    rating: '4.9',
-    reviewsCount: 340,
-    soldCount: '2.9K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: 'Zero-Cycle Cell · Original Flex Connector · Protection IC',
@@ -316,9 +299,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 1950,
     originalPricePkr: 2600,
     discountPercent: 25,
-    rating: '4.9',
-    reviewsCount: 490,
-    soldCount: '3.8K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: 'Bluetooth 5.1 · USB / SD Card / AUX · 8H Playtime',
@@ -337,9 +318,7 @@ export const CATALOG_PRODUCTS: CatalogProduct[] = [
     pricePkr: 3600,
     originalPricePkr: 4800,
     discountPercent: 25,
-    rating: '5.0',
-    reviewsCount: 520,
-    soldCount: '4.2K sold',
+    rating: '',
     freeDelivery: true,
     status: 'In Stock',
     specs: 'Bluetooth Calls · WhatsApp Alerts · Titanium-Finish Frame',
@@ -473,32 +452,8 @@ export const SHOP_GALLERY: ShopGalleryPhoto[] = [
   },
 ];
 
-export const CUSTOMER_REVIEWS: CustomerReview[] = [
-  {
-    id: 'rev-1',
-    name: 'Muhammad Bilal',
-    location: 'Chak No. 8, Hussain Khan Wala',
-    service: 'Infinix Screen Replacement',
-    quote:
-      'Replaced my broken Infinix display in under an hour with clean fitting. Touch and brightness work just like original.',
-  },
-  {
-    id: 'rev-2',
-    name: 'Tariq Mahmood',
-    location: 'Chak No. 8, Pattoki',
-    service: '67W Charger & Ronin Handsfree',
-    quote:
-      'Usman checks every charger and handsfree on the spot before handover. Still using the 67W charger daily after 6 months.',
-  },
-  {
-    id: 'rev-3',
-    name: 'Salman Rasheed',
-    location: 'Main Bazar, Pattoki',
-    service: 'Charging IC Repair',
-    quote:
-      'Two other shops said the board could not be repaired. Fixed my charging IC the same day at a fair local rate.',
-  },
-];
+// Genuine reviews only — loaded live from Firestore `reviews` collection
+export const CUSTOMER_REVIEWS: CustomerReview[] = [];
 
 export function formatPkr(amount: number): string {
   return `Rs. ${amount.toLocaleString('en-PK')}`;

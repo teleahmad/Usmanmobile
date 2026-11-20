@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   ChevronLeft,
+  ChevronRight,
   MessageCircle,
   Minus,
   Plus,
@@ -12,11 +13,13 @@ import {
   Truck,
 } from 'lucide-react';
 import { getWhatsAppUrl, ViewMode } from '../config/shopConfig';
-import { CatalogProduct, CUSTOMER_REVIEWS, formatPkr } from '../data/catalogData';
+import { CatalogProduct, formatPkr } from '../data/catalogData';
+import { LiveCustomerReview } from '../hooks/useLiveStoreData';
 import { ResilientImage } from './ResilientImage';
 
 interface ProductDetailModalProps {
   product: CatalogProduct | null;
+  liveReviews?: LiveCustomerReview[];
   cartCount?: number;
   onClose: () => void;
   onAddToCart: (product: CatalogProduct, variant: string, quantity: number) => void;
@@ -26,6 +29,7 @@ interface ProductDetailModalProps {
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
+  liveReviews = [],
   cartCount = 0,
   onClose,
   onAddToCart,
@@ -35,24 +39,51 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [selectedVariant, setSelectedVariant] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
+  const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+
+  const allPhotos = useMemo(() => {
+    if (!product) return [];
+    const list: string[] = [];
+    if (product.image?.trim()) list.push(product.image.trim());
+    if (Array.isArray(product.galleryImages)) {
+      product.galleryImages.forEach((img) => {
+        const clean = img?.trim();
+        if (clean && !list.includes(clean)) {
+          list.push(clean);
+        }
+      });
+    }
+    return list;
+  }, [product]);
 
   useEffect(() => {
     if (product) {
       setSelectedVariant(product.variants[0] ?? 'Standard');
       setQuantity(1);
       setJustAdded(false);
+      setActivePhotoIdx(0);
     }
   }, [product]);
 
   if (!product) return null;
 
+  const currentPhoto = allPhotos[activePhotoIdx] || product.image;
   const originalPrice = product.originalPricePkr ?? Math.round(product.pricePkr * 1.35);
   const discountPercent =
     product.discountPercent ??
     Math.max(10, Math.round(((originalPrice - product.pricePkr) / originalPrice) * 100));
   const savedAmount = Math.max(50, originalPrice - product.pricePkr);
-  const reviewsCount = product.reviewsCount ?? 450;
-  const soldCount = product.soldCount ?? '2.5K sold';
+  const hasRating = Boolean(product.rating?.trim());
+  const reviewsCount =
+    product.reviewsCount && product.reviewsCount > 0 ? product.reviewsCount : null;
+  const soldCount = product.soldCount?.trim() || null;
+  const shopAvgRating =
+    liveReviews.length > 0
+      ? (
+          liveReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) /
+          liveReviews.length
+        ).toFixed(1)
+      : null;
   const specChips = product.specs
     .split('·')
     .map((s) => s.trim())
@@ -129,16 +160,70 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto pb-6">
-          {/* Product Photo */}
-          <div className="relative aspect-[4/3] w-full bg-white">
-            <ResilientImage
-              src={product.image}
-              alt={product.name}
-              className="h-full w-full object-cover"
-            />
-            <span className="absolute bottom-2.5 right-2.5 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-semibold text-white">
-              {product.status}
-            </span>
+          {/* Product Photo Gallery (Main Display Pic + Multiple Product Photos) */}
+          <div className="bg-white">
+            <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
+              <ResilientImage
+                src={currentPhoto}
+                alt={product.name}
+                className="h-full w-full object-cover"
+              />
+              {allPhotos.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActivePhotoIdx((prev) => (prev - 1 + allPhotos.length) % allPhotos.length)
+                    }
+                    aria-label="Previous photo"
+                    className="absolute top-1/2 left-2.5 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white backdrop-blur-xs transition hover:bg-black/80"
+                  >
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePhotoIdx((prev) => (prev + 1) % allPhotos.length)}
+                    aria-label="Next photo"
+                    className="absolute top-1/2 right-2.5 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white backdrop-blur-xs transition hover:bg-black/80"
+                  >
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <span className="absolute bottom-2.5 left-2.5 rounded-full bg-black/65 px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                    {activePhotoIdx + 1} / {allPhotos.length}
+                  </span>
+                </>
+              )}
+              <span className="absolute bottom-2.5 right-2.5 rounded-full bg-black/60 px-2.5 py-0.5 text-[10px] font-semibold text-white">
+                {product.status}
+              </span>
+            </div>
+
+            {allPhotos.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto border-t border-black/5 bg-white px-3 py-2.5">
+                {allPhotos.map((photoUrl, idx) => {
+                  const isActive = idx === activePhotoIdx;
+                  return (
+                    <button
+                      key={`${photoUrl.slice(0, 28)}-${idx}`}
+                      type="button"
+                      onClick={() => setActivePhotoIdx(idx)}
+                      aria-label={`View photo ${idx + 1}`}
+                      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition ${
+                        isActive
+                          ? 'border-[#EA4E1B] ring-2 ring-[#EA4E1B]/25'
+                          : 'border-black/10 opacity-75 hover:opacity-100'
+                      }`}
+                    >
+                      <ResilientImage
+                        src={photoUrl}
+                        alt={`${product.name} view ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Daraz-Style Promo Price Banner */}
@@ -196,15 +281,31 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               ))}
             </div>
 
-            {/* Rating, Reviews Count & Sold Count Row */}
+            {/* Status & Optional Genuine Rating / Sold Count Row */}
             <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2.5">
-              <div className="flex items-center gap-1.5 text-xs">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
-                <span className="font-extrabold text-[#141414]">{product.rating}</span>
-                <span className="text-neutral-500">({reviewsCount} reviews)</span>
-                <span className="text-neutral-300">|</span>
-                <span className="font-semibold text-neutral-700">{soldCount}</span>
-              </div>
+              {(hasRating || reviewsCount || soldCount) ? (
+                <div className="flex items-center gap-1.5 text-xs">
+                  {hasRating && (
+                    <>
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                      <span className="font-extrabold text-[#141414]">{product.rating}</span>
+                    </>
+                  )}
+                  {reviewsCount && (
+                    <span className="text-neutral-500">({reviewsCount} reviews)</span>
+                  )}
+                  {(hasRating || reviewsCount) && soldCount && (
+                    <span className="text-neutral-300">|</span>
+                  )}
+                  {soldCount && (
+                    <span className="font-semibold text-neutral-700">{soldCount}</span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs font-semibold text-neutral-600">
+                  SKU: {product.sku}
+                </span>
+              )}
               <span className="text-[11px] font-semibold text-emerald-700">
                 {product.status}
               </span>
@@ -315,44 +416,44 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </p>
           </div>
 
-          {/* Ratings & Reviews Section */}
+          {/* Genuine Shop Ratings & Reviews Section */}
           <div className="mt-2 bg-white px-4 py-3.5 shadow-2xs">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold text-[#141414]">
-                Ratings &amp; Reviews ({reviewsCount})
+                Customer Reviews ({liveReviews.length})
               </h3>
-              <div className="flex items-center gap-1 text-xs font-extrabold text-[#141414]">
-                <span>{product.rating}</span>
-                <div className="flex items-center">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      className="h-3 w-3 fill-amber-400 text-amber-400"
-                      aria-hidden="true"
-                    />
-                  ))}
+              {shopAvgRating && (
+                <div className="flex items-center gap-1 text-xs font-extrabold text-[#141414]">
+                  <span>{shopAvgRating}</span>
+                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" aria-hidden="true" />
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="mt-3 space-y-2.5">
-              {CUSTOMER_REVIEWS.slice(0, 2).map((rev) => (
-                <div
-                  key={rev.id}
-                  className="rounded-xl bg-[#F8F6F4] p-3 text-xs text-neutral-700"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-[#141414]">{rev.name}</span>
-                    <span className="text-[10px] font-medium text-emerald-700">
-                      Verified Buyer
-                    </span>
+            {liveReviews.length === 0 ? (
+              <p className="mt-2.5 rounded-xl bg-[#F8F6F4] p-3 text-[11px] text-neutral-500">
+                No customer reviews yet — we only show genuine feedback submitted by real shop customers.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2.5">
+                {liveReviews.slice(0, 3).map((rev) => (
+                  <div
+                    key={rev.id}
+                    className="rounded-xl bg-[#F8F6F4] p-3 text-xs text-neutral-700"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-[#141414]">{rev.customerName}</span>
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-600">
+                        {rev.rating} ★
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-neutral-600">
+                      “{rev.comment}”
+                    </p>
                   </div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-neutral-600">
-                    “{rev.quote}”
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

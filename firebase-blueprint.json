@@ -24,6 +24,7 @@
         "description": { "type": "string", "maxLength": 1000 },
         "warrantyNote": { "type": "string", "maxLength": 120 },
         "image": { "type": "string", "maxLength": 350000 },
+        "galleryImages": { "type": "array", "description": "Up to 5 additional product gallery images (main image is stored in image)" },
         "variants": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }

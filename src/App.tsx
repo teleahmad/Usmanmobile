@@ -600,6 +600,7 @@ export default function App() {
 
       <ProductDetailModal
         product={inspectedProduct}
+        liveReviews={liveReviews.filter((r) => !hiddenReviewIds.includes(r.id))}
         cartCount={totalCartCount}
         onClose={handleCloseInspectedProduct}
         onAddToCart={handleAddToCart}
