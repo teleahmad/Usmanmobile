@@ -186,11 +186,11 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     // Distant fog softly fades map boundaries into warm sand horizon
     scene.fog = new THREE.Fog(0xf3ece6, 170, 340);
 
-    // Subtle twilight atmospheric sky dome for depth when orbiting/tilting camera
+    // Subtle atmospheric sky dome matching warm sand background for depth
     const skyDome = new THREE.Mesh(
       new THREE.SphereGeometry(320, 32, 20),
       new THREE.MeshBasicMaterial({
-        map: createTwilightSkyTexture(),
+        color: 0xf3ece6,
         side: THREE.BackSide,
         depthWrite: false,
         fog: false,
@@ -741,6 +741,10 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
               1,
             );
             applyMonitorApproachGoals(monitorApproach);
+            if (monitorApproach >= 0.78 || distRatio > 1.025) {
+              triggerEnterHomeFromMonitor();
+              return;
+            }
           } else if (distRatio < 0.997 && monitorApproach > 0) {
             monitorApproach = THREE.MathUtils.clamp(
               monitorApproach - (1 - distRatio) * 1.75,
@@ -946,6 +950,14 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       pointerDownPos = null;
       const tapThreshold = e.pointerType === 'touch' ? 12 : 6;
       if (dist > tapThreshold) return; // Was a drag/orbit/pan, not a tap or click
+
+      if (insideShop) {
+        _raycaster.setFromCamera(_ndc, camera);
+        if (_raycaster.intersectObject(shop.monitorHitTarget, false).length > 0 || isLookingTowardMonitor()) {
+          triggerEnterHomeFromMonitor();
+          return;
+        }
+      }
 
       const rect = renderer.domElement.getBoundingClientRect();
       _ndc.set(
