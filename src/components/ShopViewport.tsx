@@ -303,6 +303,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     let exitScrollAccum = 0;
     let monitorApproach = 0;
     let moreZoomAccum = 0;
+    let pinchMoreAccum = 0;
+    let canEnterOnPinch = false;
+    let monitorArrivalTime = 0;
     let enteringWebsite = false;
     let enterTimer: number | null = null;
     let hoveringMonitor = false;
@@ -362,8 +365,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         _targetGoal.copy(_standTarget);
         _camGoal.copy(_standCam);
         fovTarget = baseFov;
-        controls.minDistance = 0.05;
-        controls.maxDistance = 5.0;
+        controls.enableRotate = true;
+        controls.minDistance = 0.06;
+        controls.maxDistance = 0.1;
       }
 
       transitionActive = true;
@@ -376,6 +380,8 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       enteringWebsite = true;
       monitorApproach = 1;
       moreZoomAccum = 0;
+      pinchMoreAccum = 0;
+      canEnterOnPinch = false;
       twoFingerActive = false;
       controls.enabled = false;
       setShutterOpenedState(true);
@@ -421,6 +427,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       exitScrollAccum = 0;
       monitorApproach = 0;
       moreZoomAccum = 0;
+      pinchMoreAccum = 0;
+      canEnterOnPinch = false;
+      monitorArrivalTime = 0;
       stateRef.current.onInsideShopChange?.(inside);
       needsRender = true;
       requestRender();
@@ -512,6 +521,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       twoFingerActive = false;
       monitorApproach = 0;
       moreZoomAccum = 0;
+      pinchMoreAccum = 0;
+      canEnterOnPinch = false;
+      monitorArrivalTime = 0;
       controls.enableRotate = true;
       controls.enabled = true;
       setInsideShopState(false);
@@ -537,6 +549,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       twoFingerActive = false;
       monitorApproach = 0;
       moreZoomAccum = 0;
+      pinchMoreAccum = 0;
+      canEnterOnPinch = false;
+      monitorArrivalTime = 0;
       enteringWebsite = false;
       controls.enableRotate = true;
       controls.enabled = true;
@@ -705,6 +720,8 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         transitionActive = false;
         twoFingerActive = true;
         controls.enabled = false;
+        pinchMoreAccum = 0;
+        canEnterOnPinch = insideShop && monitorApproach >= 0.96;
         const t0 = e.touches[0];
         const t1 = e.touches[1];
         prevTouch0Y = t0.clientY;
@@ -729,30 +746,43 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       const curMidY = (t0.clientY + t1.clientY) * 0.5;
       const distRatio = curDist / Math.max(10, prevTouchDist);
 
-      // Inside shop: 2-finger pinch moves closer to counter monitor when facing it (or zooms FOV), then pinching out exits cleanly
+      // Inside shop: first 2-finger pinch smoothly zooms up to inspect the counter monitor;
+      // only a subsequent pinch-in (once already close) or direct monitor tap enters the Home Page!
       if (insideShop) {
         if (enteringWebsite) return;
         if (Math.abs(distRatio - 1) > 0.002) {
           const facingMonitor = isLookingTowardMonitor();
-          if (distRatio > 1.003 && (facingMonitor || monitorApproach > 0)) {
-            monitorApproach = THREE.MathUtils.clamp(
-              monitorApproach + (distRatio - 1) * 1.65,
-              0,
-              1,
-            );
-            applyMonitorApproachGoals(monitorApproach);
-            if (monitorApproach >= 0.78 || distRatio > 1.025) {
-              triggerEnterHomeFromMonitor();
-              return;
+          if (distRatio > 1.002 && (facingMonitor || monitorApproach > 0)) {
+            if (monitorApproach < 0.995) {
+              const prevApproach = monitorApproach;
+              monitorApproach = THREE.MathUtils.clamp(
+                monitorApproach + (distRatio - 1) * 1.15,
+                0,
+                1,
+              );
+              pinchMoreAccum = 0;
+              if (prevApproach < 0.995 && monitorApproach >= 0.995) {
+                monitorArrivalTime = performance.now();
+              }
+              applyMonitorApproachGoals(monitorApproach);
+            } else if (canEnterOnPinch || performance.now() - monitorArrivalTime > 450) {
+              pinchMoreAccum += (distRatio - 1) * 1.25;
+              if (pinchMoreAccum >= 0.16) {
+                triggerEnterHomeFromMonitor();
+                return;
+              }
             }
           } else if (distRatio < 0.997 && monitorApproach > 0) {
+            pinchMoreAccum = 0;
+            canEnterOnPinch = false;
             monitorApproach = THREE.MathUtils.clamp(
-              monitorApproach - (1 - distRatio) * 1.75,
+              monitorApproach - (1 - distRatio) * 1.35,
               0,
               1,
             );
             applyMonitorApproachGoals(monitorApproach);
           } else {
+            pinchMoreAccum = 0;
             const nextFov = THREE.MathUtils.clamp(fovTarget / distRatio, 30, 74);
             if (distRatio < 0.992 && fovTarget >= 72.5 && monitorApproach <= 0.01) {
               twoFingerActive = false;
@@ -951,19 +981,19 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       const tapThreshold = e.pointerType === 'touch' ? 12 : 6;
       if (dist > tapThreshold) return; // Was a drag/orbit/pan, not a tap or click
 
-      if (insideShop) {
-        _raycaster.setFromCamera(_ndc, camera);
-        if (_raycaster.intersectObject(shop.monitorHitTarget, false).length > 0 || isLookingTowardMonitor()) {
-          triggerEnterHomeFromMonitor();
-          return;
-        }
-      }
-
       const rect = renderer.domElement.getBoundingClientRect();
       _ndc.set(
         ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
         -((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
       );
+
+      if (insideShop) {
+        _raycaster.setFromCamera(_ndc, camera);
+        if (_raycaster.intersectObject(shop.monitorHitTarget, false).length > 0) {
+          triggerEnterHomeFromMonitor();
+          return;
+        }
+      }
 
       if (currentMode === 'map' && stateRef.current.editPinMode) {
         _raycaster.setFromCamera(_ndc, camera);
@@ -1055,12 +1085,16 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         if (clampedDelta < 0 && targetingMonitor) {
           exitScrollAccum = 0;
           if (monitorApproach < 0.995) {
-            monitorApproach = Math.min(1, monitorApproach + (-clampedDelta) * 0.0042);
+            const prevApproach = monitorApproach;
+            monitorApproach = Math.min(1, monitorApproach + (-clampedDelta) * 0.0036);
             moreZoomAccum = 0;
+            if (prevApproach < 0.995 && monitorApproach >= 0.995) {
+              monitorArrivalTime = performance.now();
+            }
             applyMonitorApproachGoals(monitorApproach);
-          } else {
+          } else if (performance.now() - monitorArrivalTime > 420) {
             moreZoomAccum += -clampedDelta;
-            if (moreZoomAccum >= 45) {
+            if (moreZoomAccum >= 75) {
               triggerEnterHomeFromMonitor();
             }
           }
@@ -1069,7 +1103,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
 
         if (clampedDelta > 0 && monitorApproach > 0) {
           moreZoomAccum = 0;
-          monitorApproach = Math.max(0, monitorApproach - clampedDelta * 0.0046);
+          monitorApproach = Math.max(0, monitorApproach - clampedDelta * 0.0042);
           applyMonitorApproachGoals(monitorApproach);
           return;
         }
@@ -1392,7 +1426,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         const lambda = enteringWebsite
           ? 5.6
           : insideShop && monitorApproach > 0
-            ? 5.2
+            ? 4.5
             : insideShop
               ? 6.4
               : 4.2;

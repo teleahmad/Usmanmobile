@@ -44,6 +44,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const velocityRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const hoveredIdxRef = useRef<number>(0);
+  const initializedRef = useRef(false);
 
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -61,10 +62,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     const lens = lensRef.current;
     if (!lens) return;
     // Organic liquid glass velocity stretch while gliding across buttons
-    const speed = Math.min(Math.abs(vel), 0.45);
-    const stretchX = dragging ? 1.07 + speed * 0.34 : 1 + speed * 0.22;
-    const stretchY = dragging ? 1.05 - speed * 0.14 : 1 - speed * 0.08;
-    lens.style.transform = `translate3d(${pos * 100}%, 0, 0) scale(${stretchX.toFixed(
+    const speed = Math.min(Math.abs(vel), 0.35);
+    const stretchX = dragging ? 1.06 + speed * 0.28 : 1 + speed * 0.16;
+    const stretchY = dragging ? 1.04 - speed * 0.1 : 1 - speed * 0.06;
+    lens.style.transform = `translate3d(${(pos * 100).toFixed(3)}%, 0, 0) scale(${stretchX.toFixed(
       4,
     )}, ${stretchY.toFixed(4)})`;
   }, []);
@@ -77,9 +78,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       const current = currentPosRef.current;
       const dragging = draggingRef.current;
 
-      // Critically damped spring when snapping, silky high-response lerp when dragging
-      const stiffness = dragging ? 0.38 : 0.22;
-      const damping = dragging ? 0.52 : 0.68;
+      // Smooth critically damped spring that never stalls partway
+      const stiffness = dragging ? 0.42 : 0.26;
+      const damping = dragging ? 0.56 : 0.66;
 
       const force = (target - current) * stiffness;
       velocityRef.current = (velocityRef.current + force) * damping;
@@ -89,8 +90,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       const settled =
         !dragging &&
-        Math.abs(target - currentPosRef.current) < 0.0015 &&
-        Math.abs(velocityRef.current) < 0.0015;
+        Math.abs(target - currentPosRef.current) < 0.002 &&
+        Math.abs(velocityRef.current) < 0.002;
 
       if (settled) {
         currentPosRef.current = target;
@@ -109,16 +110,25 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   useEffect(() => {
     if (draggingRef.current) return;
     if (activeIndex >= 0) {
+      if (!initializedRef.current) {
+        initializedRef.current = true;
+        currentPosRef.current = activeIndex;
+        targetPosRef.current = activeIndex;
+        hoveredIdxRef.current = activeIndex;
+        applyLensTransform(activeIndex, 0, false);
+        return;
+      }
       targetPosRef.current = activeIndex;
       hoveredIdxRef.current = activeIndex;
       startPhysicsLoop();
     }
-  }, [activeIndex, startPhysicsLoop]);
+  }, [activeIndex, applyLensTransform, startPhysicsLoop]);
 
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
     };
   }, []);
@@ -129,8 +139,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0) return 0;
     const raw = ((clientX - rect.left) / rect.width) * TAB_COUNT - 0.5;
-    if (raw < 0) return raw * 0.16;
-    if (raw > TAB_COUNT - 1) return TAB_COUNT - 1 + (raw - (TAB_COUNT - 1)) * 0.16;
+    if (raw < 0) return raw * 0.14;
+    if (raw > TAB_COUNT - 1) return TAB_COUNT - 1 + (raw - (TAB_COUNT - 1)) * 0.14;
     return raw;
   };
 
@@ -175,7 +185,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       // Ignore capture errors
     }
     const pos = computeSlotPos(e.clientX);
-    if (activeIndex < 0) {
+    if (!initializedRef.current || activeIndex < 0) {
+      initializedRef.current = true;
       currentPosRef.current = pos;
     }
     draggingRef.current = true;
@@ -210,7 +221,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   };
 
   const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (pointerIdRef.current !== e.pointerId) return;
+    if (pointerIdRef.current !== e.pointerId && !draggingRef.current) return;
     pointerIdRef.current = null;
     draggingRef.current = false;
     setIsDragging(false);
@@ -237,6 +248,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
         className="pointer-events-auto relative mx-auto grid max-w-md grid-cols-5 items-center rounded-[30px] border border-white/85 bg-white/60 p-1.5 backdrop-blur-2xl backdrop-saturate-[2] select-none touch-none shadow-[0_14px_36px_rgba(20,20,20,0.16),inset_0_1.5px_1.5px_rgba(255,255,255,0.96),inset_0_-1px_2px_rgba(20,20,20,0.06)]"
       >
         {/* Top Specular Glass Rim */}
@@ -245,17 +257,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           className="pointer-events-none absolute inset-x-4 top-0.5 h-3 rounded-full bg-gradient-to-b from-white/80 to-transparent"
         />
 
-        {/* GPU-Accelerated Spring Liquid Glass Lens */}
+        {/* GPU-Accelerated Spring Liquid Glass Lens (transform owned exclusively by rAF loop) */}
         {showLens && (
           <div
             ref={lensRef}
             aria-hidden="true"
             style={{
               width: `calc((100% - 12px) / ${TAB_COUNT})`,
-              transform: `translate3d(${Math.max(0, activeIndex) * 100}%, 0, 0)`,
               willChange: 'transform',
             }}
-            className={`pointer-events-none absolute top-1.5 bottom-1.5 left-1.5 rounded-[24px] border border-white/95 backdrop-blur-xl transition-[background-color,box-shadow] duration-200 ${
+            className={`pointer-events-none absolute top-1.5 bottom-1.5 left-1.5 rounded-[24px] border border-white/95 transition-[background-color,box-shadow] duration-200 ${
               isOverWhatsApp
                 ? 'bg-gradient-to-b from-white/95 via-emerald-50/75 to-emerald-100/55 shadow-[0_8px_22px_rgba(22,163,74,0.24),inset_0_2px_2px_rgba(255,255,255,0.98),inset_0_-1.5px_3px_rgba(22,163,74,0.14)]'
                 : 'bg-gradient-to-b from-white/95 via-white/72 to-[#EA4E1B]/12 shadow-[0_8px_22px_rgba(234,78,27,0.22),inset_0_2px_2px_rgba(255,255,255,0.98),inset_0_-1.5px_3px_rgba(234,78,27,0.12)]'
