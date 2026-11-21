@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Crop, Maximize2, RotateCcw, X } from 'lucide-react';
 import { NormalizedCropRect, renderCroppedImageToDataUrl } from '../utils/imageUpload';
 
@@ -30,7 +31,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   onCancel,
   onApply,
 }) => {
-  const [crop, setCrop] = useState<NormalizedCropRect>({ x: 0.06, y: 0.06, w: 0.88, h: 0.88 });
+  const [crop, setCrop] = useState<NormalizedCropRect>({ x: 0.04, y: 0.04, w: 0.92, h: 0.92 });
+  const [activePreset, setActivePreset] = useState<'free' | '1:1' | '4:3' | '16:10' | 'full'>('free');
   const [imgDimensions, setImgDimensions] = useState<{ w: number; h: number }>({ w: 1, h: 1 });
   const [applying, setApplying] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -47,7 +49,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
 
   useEffect(() => {
     if (imageSrc) {
-      setCrop({ x: 0.06, y: 0.06, w: 0.88, h: 0.88 });
+      setCrop({ x: 0.04, y: 0.04, w: 0.92, h: 0.92 });
+      setActivePreset('free');
       setErrorMsg(null);
       setApplying(false);
     }
@@ -118,7 +121,11 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     dragStateRef.current = null;
   };
 
-  const applyAspectPreset = (aspect: number | 'full') => {
+  const applyAspectPreset = (
+    aspect: number | 'full',
+    presetKey: '1:1' | '4:3' | '16:10' | 'full',
+  ) => {
+    setActivePreset(presetKey);
     if (aspect === 'full') {
       setCrop({ x: 0, y: 0, w: 1, h: 1 });
       return;
@@ -162,10 +169,13 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const outPxW = Math.round(crop.w * imgDimensions.w);
   const outPxH = Math.round(crop.h * imgDimensions.h);
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-xs"
-      onClick={onCancel}
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-3 sm:p-6 backdrop-blur-xs"
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
     >
       <div
         role="dialog"
@@ -202,36 +212,59 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setCrop({ x: 0.08, y: 0.08, w: 0.84, h: 0.84 })}
-              className="rounded-full bg-[#EA4E1B] px-2.5 py-1 font-bold text-white"
+              onClick={() => {
+                setActivePreset('free');
+                setCrop({ x: 0.04, y: 0.04, w: 0.92, h: 0.92 });
+              }}
+              className={`rounded-full px-2.5 py-1 font-bold transition ${
+                activePreset === 'free'
+                  ? 'bg-[#EA4E1B] text-white'
+                  : 'border border-neutral-300 bg-white text-neutral-700 hover:border-[#EA4E1B]'
+              }`}
             >
               Free-Form
             </button>
             <button
               type="button"
-              onClick={() => applyAspectPreset(1)}
-              className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 font-semibold text-neutral-700 hover:border-[#EA4E1B]"
+              onClick={() => applyAspectPreset(1, '1:1')}
+              className={`rounded-full px-2.5 py-1 font-semibold transition ${
+                activePreset === '1:1'
+                  ? 'bg-[#EA4E1B] text-white font-bold'
+                  : 'border border-neutral-300 bg-white text-neutral-700 hover:border-[#EA4E1B]'
+              }`}
             >
               1:1 Square
             </button>
             <button
               type="button"
-              onClick={() => applyAspectPreset(4 / 3)}
-              className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 font-semibold text-neutral-700 hover:border-[#EA4E1B]"
+              onClick={() => applyAspectPreset(4 / 3, '4:3')}
+              className={`rounded-full px-2.5 py-1 font-semibold transition ${
+                activePreset === '4:3'
+                  ? 'bg-[#EA4E1B] text-white font-bold'
+                  : 'border border-neutral-300 bg-white text-neutral-700 hover:border-[#EA4E1B]'
+              }`}
             >
               4:3 Card
             </button>
             <button
               type="button"
-              onClick={() => applyAspectPreset(16 / 10)}
-              className="rounded-full border border-neutral-300 bg-white px-2.5 py-1 font-semibold text-neutral-700 hover:border-[#EA4E1B]"
+              onClick={() => applyAspectPreset(16 / 10, '16:10')}
+              className={`rounded-full px-2.5 py-1 font-semibold transition ${
+                activePreset === '16:10'
+                  ? 'bg-[#EA4E1B] text-white font-bold'
+                  : 'border border-neutral-300 bg-white text-neutral-700 hover:border-[#EA4E1B]'
+              }`}
             >
               16:10 Wide
             </button>
             <button
               type="button"
-              onClick={() => applyAspectPreset('full')}
-              className="inline-flex items-center gap-1 rounded-full border border-neutral-300 bg-white px-2.5 py-1 font-semibold text-neutral-700 hover:border-[#EA4E1B]"
+              onClick={() => applyAspectPreset('full', 'full')}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold transition ${
+                activePreset === 'full'
+                  ? 'bg-[#EA4E1B] text-white font-bold'
+                  : 'border border-neutral-300 bg-white text-neutral-700 hover:border-[#EA4E1B]'
+              }`}
             >
               <Maximize2 className="h-3 w-3" />
               Full
@@ -411,4 +444,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 };

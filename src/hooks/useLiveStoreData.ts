@@ -8,6 +8,7 @@ import {
 import {
   CATALOG_PRODUCTS,
   CatalogProduct,
+  resolvePortableAssetUrl,
   SHOP_GALLERY,
   ShopGalleryPhoto,
   SITE_IMAGES,
@@ -232,19 +233,29 @@ export function useLiveStoreData() {
         try {
           localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(next));
         } catch {
-          // If full base64 product images exceed localStorage quota, still persist slim metadata & deleted flags
-          const slim: Record<string, FirestoreProductDoc> = {};
-          Object.entries(next).forEach(([id, docData]) => {
-            const img = docData.image;
-            slim[id] = {
-              ...docData,
-              image: img && img.length > 60_000 ? undefined : img,
-              galleryImages: Array.isArray(docData.galleryImages)
-                ? docData.galleryImages.filter((g) => typeof g === 'string' && g.length <= 60_000)
-                : undefined,
-            };
-          });
-          writeJsonCache(PRODUCTS_CACHE_KEY, slim);
+          // Persist as many full products as fit within localStorage quota without stripping images to undefined
+          const partial: Record<string, FirestoreProductDoc> = {};
+          for (const [id, docData] of Object.entries(next)) {
+            const candidate = { ...partial, [id]: docData };
+            try {
+              localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(candidate));
+              partial[id] = docData;
+            } catch {
+              // Preserve deleted/hidden metadata cleanly if image base64 exceeds 5MB quota
+              const slimDoc: FirestoreProductDoc = {
+                ...docData,
+                image:
+                  docData.image && docData.image.length > 60_000 ? undefined : docData.image,
+                galleryImages: Array.isArray(docData.galleryImages)
+                  ? docData.galleryImages.filter(
+                      (g) => typeof g === 'string' && g.length <= 60_000,
+                    )
+                  : undefined,
+              };
+              partial[id] = slimDoc;
+              writeJsonCache(PRODUCTS_CACHE_KEY, partial);
+            }
+          }
         }
       },
       (err) => {
@@ -462,9 +473,15 @@ export function useLiveStoreData() {
             specs: override.specs || base.specs,
             description: override.description || base.description,
             warrantyNote: override.warrantyNote || base.warrantyNote,
-            image: override.image || (productsReady ? base.image : ''),
+            image: override.image
+              ? resolvePortableAssetUrl(override.image, base.image)
+              : productsReady
+                ? base.image
+                : '',
             galleryImages: Array.isArray(override.galleryImages)
-              ? override.galleryImages.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+              ? override.galleryImages
+                  .filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+                  .map((g) => resolvePortableAssetUrl(g, base.image))
               : undefined,
             variants:
               Array.isArray(override.variants) && override.variants.length > 0
@@ -492,6 +509,13 @@ export function useLiveStoreData() {
             : originalPricePkr > pricePkr
               ? Math.round(((originalPricePkr - pricePkr) / originalPricePkr) * 100)
               : 0;
+        const resolvedGallery = Array.isArray(data.galleryImages)
+          ? data.galleryImages
+              .filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+              .map((g) => resolvePortableAssetUrl(g, SITE_IMAGES.realInteriorCounter))
+          : undefined;
+        const fallbackCustomImg =
+          resolvedGallery?.[0] || (productsReady ? SITE_IMAGES.realInteriorCounter : '');
 
         return {
           id,
@@ -517,10 +541,10 @@ export function useLiveStoreData() {
             data.description ||
             'Available for pickup at Usman Mobile Repairing Centre or local delivery in Chak No. 8 & Pattoki.',
           warrantyNote: data.warrantyNote || 'Live check at counter',
-          image: data.image || (productsReady ? SITE_IMAGES.realInteriorCounter : ''),
-          galleryImages: Array.isArray(data.galleryImages)
-            ? data.galleryImages.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
-            : undefined,
+          image: data.image
+            ? resolvePortableAssetUrl(data.image, fallbackCustomImg)
+            : fallbackCustomImg,
+          galleryImages: resolvedGallery,
           variants:
             Array.isArray(data.variants) && data.variants.length > 0
               ? data.variants
@@ -544,7 +568,7 @@ export function useLiveStoreData() {
     const resolveSlot = (slotKey: keyof typeof SITE_IMAGES): string => {
       const overrideUrl = mediaOverrides[slotKey]?.imageUrl;
       if (overrideUrl === REMOVED_IMAGE_MARKER) return REMOVED_IMAGE_MARKER;
-      if (overrideUrl) return overrideUrl;
+      if (overrideUrl) return resolvePortableAssetUrl(overrideUrl, SITE_IMAGES[slotKey]);
       // On a brand-new browser before initial Firestore siteMedia arrives, render clean shimmer
       // instead of flashing an old/deleted default image for 1–2 seconds.
       if (!mediaReady) return '';
@@ -583,7 +607,11 @@ export function useLiveStoreData() {
       const src =
         override?.imageUrl === REMOVED_IMAGE_MARKER
           ? REMOVED_IMAGE_MARKER
-          : override?.imageUrl || (!mediaReady ? '' : photo.src);
+          : override?.imageUrl
+            ? resolvePortableAssetUrl(override.imageUrl, photo.src)
+            : !mediaReady
+              ? ''
+              : photo.src;
       return {
         ...photo,
         src,

@@ -89,12 +89,13 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
             </div>
 
             <div className="lg:col-span-6">
-              <div className="relative aspect-[8/3] w-full overflow-hidden rounded-2xl bg-white">
+              <div className="relative flex w-full items-center justify-center overflow-hidden rounded-2xl bg-white">
                 <ResilientImage
                   src={siteImages.signboard}
+                  fallbackSrc={SITE_IMAGES.signboard}
                   alt="Usman Mobile Repairing Centre Main Bazar signboard"
                   priority
-                  className="h-full w-full object-cover"
+                  className="block max-h-[260px] w-full h-auto object-contain"
                 />
                 {/* Seamless 4-side feathered blur & smooth white dissolve without clipping signboard edges */}
                 <div className="pointer-events-none absolute inset-0 backdrop-blur-[2px] [-webkit-mask-image:radial-gradient(ellipse_82%_78%_at_center,transparent_66%,black_100%)] [mask-image:radial-gradient(ellipse_82%_78%_at_center,transparent_66%,black_100%)]" />
@@ -102,6 +103,7 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
                 <AdminImageControls
                   slotKey="signboard"
                   label="Shop Signboard"
+                  currentImage={siteImages.signboard}
                   hasOverride={Boolean(mediaOverrides.signboard)}
                 />
               </div>
@@ -128,11 +130,11 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
                 onClick={() => setLightboxPhoto(photo)}
                 className="group cursor-pointer overflow-hidden rounded-2xl border border-black/5 bg-white p-3 shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#EA4E1B]"
               >
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-white">
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
                   <ResilientImage
                     src={photo.src}
                     alt={photo.title}
-                    className="h-full w-full scale-[1.02] object-cover transition-transform duration-300 group-hover:scale-[1.06]"
+                    className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
                   />
                   {/* Seamless 4-side feathered blur & smooth white dissolve (zero corner artifacts) */}
                   <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />
@@ -141,6 +143,7 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
                     <AdminImageControls
                       slotKey={slotKey}
                       label={photo.title}
+                      currentImage={photo.src}
                       hasOverride={Boolean(mediaOverrides[slotKey])}
                     />
                   )}
@@ -248,12 +251,14 @@ export const AboutContactPage: React.FC<AboutContactPageProps> = ({
             <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-neutral-100 lg:flex-1">
               <ResilientImage
                 src={siteImages.aerialMap}
+                fallbackSrc={SITE_IMAGES.aerialMap}
                 alt="Interactive 3D village map of Hussain Khan Wala"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
               <AdminImageControls
                 slotKey="aerialMap"
                 label="3D Village Map Preview"
+                currentImage={siteImages.aerialMap}
                 hasOverride={Boolean(mediaOverrides.aerialMap)}
               />
             </div>

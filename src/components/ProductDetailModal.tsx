@@ -162,11 +162,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         <div className="flex-1 overflow-y-auto pb-6">
           {/* Product Photo Gallery (Main Display Pic + Multiple Product Photos) */}
           <div className="bg-white">
-            <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
+            <div className="relative flex min-h-[240px] w-full items-center justify-center overflow-hidden bg-[#F8F6F4]">
               <ResilientImage
                 src={currentPhoto}
+                fallbackSrc={allPhotos.find((u) => u !== currentPhoto)}
                 alt={product.name}
-                className="h-full w-full object-cover"
+                className="block max-h-[420px] w-full h-auto object-contain"
               />
               {allPhotos.length > 1 && (
                 <>
@@ -208,7 +209,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       type="button"
                       onClick={() => setActivePhotoIdx(idx)}
                       aria-label={`View photo ${idx + 1}`}
-                      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition ${
+                      className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 bg-[#F8F6F4] transition ${
                         isActive
                           ? 'border-[#EA4E1B] ring-2 ring-[#EA4E1B]/25'
                           : 'border-black/10 opacity-75 hover:opacity-100'
@@ -217,7 +218,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       <ResilientImage
                         src={photoUrl}
                         alt={`${product.name} view ${idx + 1}`}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     </button>
                   );

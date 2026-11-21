@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -55,6 +55,22 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(query.length > 0);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    if (query.length > 0) {
+      setIsOpen(true);
+    }
+  }, [query]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 150);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const trimmed = query.trim();
 
@@ -71,6 +87,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
   const handleChipClick = (chipLabel: string) => {
     const isSame = trimmed.toLowerCase() === chipLabel.toLowerCase();
     onQueryChange(isSame ? '' : chipLabel);
+    setIsOpen(true);
     if (!isSame) {
       window.setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -107,15 +124,53 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
   return (
     <section
       aria-label="Global product and repair search"
-      className="border-b border-black/6 bg-[#FAF5F0]"
+      className="relative border-b border-black/6 bg-[#FAF5F0]"
     >
+      {/* Floating Scroll Search Pill (Always appears when scrolled down) */}
+      {isScrolled && (
+        <div className="fixed top-16 right-4 z-50 animate-in fade-in slide-in-from-top-2 duration-300 sm:right-6">
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(true);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              window.setTimeout(() => inputRef.current?.focus(), 150);
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/65 px-4 py-2 text-xs font-bold text-[#141414] shadow-md backdrop-blur-sm transition hover:border-[#F25C19] hover:bg-white hover:text-[#F25C19] active:scale-95"
+          >
+            <Search className="h-4 w-4 text-[#F25C19]" />
+            <span className="hidden sm:inline">{t('Search Store', 'اسٹور تلاش کریں')}</span>
+          </button>
+        </div>
+      )}
+
       <div className="mx-auto max-w-[1200px] px-3 py-3 sm:px-6 sm:py-3.5 lg:px-8">
-        {/* Search Form */}
-        <form
-          onSubmit={handleFormSubmit}
-          role="search"
-          className="mx-auto flex max-w-3xl items-center gap-1.5 rounded-2xl border border-black/10 bg-white p-1.5 shadow-[0_2px_10px_rgba(20,20,20,0.04)] transition-all focus-within:border-[#F25C19] focus-within:ring-2 focus-within:ring-[#F25C19]/15"
-        >
+        {/* Search Bar / Icon Trigger */}
+        {!isOpen && trimmed.length === 0 ? (
+          <div className="mx-auto flex max-w-3xl items-center justify-center py-1">
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(true);
+                window.setTimeout(() => inputRef.current?.focus(), 60);
+              }}
+              aria-label="Open search"
+              className="group inline-flex items-center gap-2.5 rounded-full border border-black/15 bg-white px-5 py-2.5 text-xs font-bold text-[#141414] shadow-xs transition hover:border-[#F25C19] hover:bg-orange-50/50 hover:text-[#F25C19]"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-orange-100 text-[#F25C19] transition group-hover:bg-[#F25C19] group-hover:text-white">
+                <Search className="h-4 w-4" />
+              </span>
+              <span className={isUrdu ? 'font-urdu' : ''}>
+                {t('Click to Search Products & Repairs', 'پراڈکٹس اور ریپئرنگ تلاش کرنے کے لیے کلک کریں')}
+              </span>
+            </button>
+          </div>
+        ) : (
+          <form
+            onSubmit={handleFormSubmit}
+            role="search"
+            className="mx-auto flex max-w-3xl items-center gap-1.5 rounded-2xl border border-black/10 bg-white p-1.5 shadow-[0_2px_10px_rgba(20,20,20,0.04)] transition-all duration-300 ease-out animate-in fade-in zoom-in-95 focus-within:border-[#F25C19] focus-within:ring-2 focus-within:ring-[#F25C19]/15"
+          >
           <div className="flex flex-1 items-center gap-2 pl-2.5 sm:pl-3">
             <Search
               className="h-4 w-4 shrink-0 text-[#F25C19] sm:h-[18px] sm:w-[18px]"
@@ -157,6 +212,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
             <span>{t('Search', 'تلاش کریں')}</span>
           </button>
         </form>
+        )}
 
         {/* Quick-Tap Suggestion Chips */}
         <div className="mx-auto mt-2.5 flex max-w-3xl items-center gap-1.5 overflow-x-auto pb-0.5 sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0">
@@ -304,11 +360,12 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({
                             onClick={() => onInspectProduct(product)}
                             className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-black/6 bg-[#FAF8F6] transition hover:-translate-y-0.5 hover:border-[#F25C19] hover:bg-white hover:shadow-md"
                           >
-                            <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F3ECE6]">
+                            <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
                               <ResilientImage
                                 src={product.image}
+                                fallbackSrc={product.galleryImages?.[0]}
                                 alt={product.name}
-                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                                className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
                               />
                               {onAdminEditProduct && (
                                 <AdminProductEditTrigger

@@ -526,3 +526,97 @@ export function buildRepairQuoteWhatsAppUrl(params: {
   }
   return `https://wa.me/${SHOP_CONFIG.WHATSAPP}?text=${encodeURIComponent(lines.join('\n'))}`;
 }
+
+function extractAssetKey(url: string): string | null {
+  const clean = url.split('?')[0].split('#')[0].trim();
+  if (!clean) return null;
+  if (clean.startsWith('asset://')) {
+    return clean.slice('asset://'.length) || null;
+  }
+  if (clean.startsWith('/assets/aistudio/') || clean.startsWith('assets/aistudio/')) {
+    return null;
+  }
+  const match = clean.match(/(?:^|\/)(?:src\/assets\/images|assets)\/([^/]+)$/i);
+  if (!match) return null;
+  const filename = match[1];
+  // Strip extension and optional Vite build content hash suffix (e.g. -B9k2Lp10)
+  const noExt = filename.replace(/\.(jpg|jpeg|png|webp|avif|gif|svg)$/i, '');
+  return noExt.replace(/-[A-Za-z0-9_-]{6,16}$/, '');
+}
+
+const BUNDLED_ASSET_BY_KEY: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  const register = (url: string) => {
+    if (!url) return;
+    const key = extractAssetKey(url);
+    if (key) {
+      map[key] = url;
+    }
+  };
+  Object.values(SITE_IMAGES).forEach(register);
+  Object.values(SHOP_IMAGES).forEach(register);
+  CATALOG_PRODUCTS.forEach((p) => register(p.image));
+  return map;
+})();
+
+/**
+ * Resolves any image string from Firestore to a working URL in the current build.
+ * Translates stale cross-deploy Vite asset URLs (e.g. `/assets/item_...-HASH.jpg` saved from
+ * Netlify or another build) or portable `asset://key` tokens to the live asset in this bundle.
+ */
+export function resolvePortableAssetUrl(
+  rawUrl?: string | null,
+  fallbackUrl = '',
+): string {
+  const trimmed = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!trimmed) return fallbackUrl;
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('/assets/aistudio/')
+  ) {
+    return trimmed;
+  }
+  const key = extractAssetKey(trimmed);
+  if (key && BUNDLED_ASSET_BY_KEY[key]) {
+    return BUNDLED_ASSET_BY_KEY[key];
+  }
+  if (trimmed.startsWith('/assets/') || trimmed.startsWith('/src/assets/')) {
+    return fallbackUrl || trimmed;
+  }
+  return trimmed;
+}
+
+/**
+ * Converts a local bundled Vite asset path into a portable `asset://key` token (or omits it
+ * if unchanged from the built-in default) so saving from mobile/Netlify never writes a
+ * build-specific hashed `/assets/...-HASH.jpg` path that breaks on other builds.
+ */
+export function sanitizeImageForFirestore(
+  rawUrl?: string | null,
+  defaultAssetUrl?: string,
+): string | undefined {
+  const trimmed = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!trimmed) return '';
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/assets/aistudio/') ||
+    trimmed.startsWith('asset://')
+  ) {
+    return trimmed;
+  }
+  const key = extractAssetKey(trimmed);
+  if (key && BUNDLED_ASSET_BY_KEY[key]) {
+    const defaultKey = defaultAssetUrl ? extractAssetKey(defaultAssetUrl) : null;
+    if (defaultKey && defaultKey === key) {
+      return undefined;
+    }
+    return `asset://${key}`;
+  }
+  return trimmed;
+}
+

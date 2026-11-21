@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
+  Crop,
   Edit3,
   Plus,
   RotateCcw,
@@ -11,13 +12,18 @@ import {
 } from 'lucide-react';
 import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { useAdminAuth } from '../context/AdminAuthContext';
-import { CatalogProduct, formatPkr } from '../data/catalogData';
+import {
+  CatalogProduct,
+  formatPkr,
+  sanitizeImageForFirestore,
+} from '../data/catalogData';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   HomeSectionsConfig,
   SiteMediaSlotKey,
 } from '../hooks/useLiveStoreData';
-import { compressImageFileToDataUrl } from '../utils/imageUpload';
+import { readFileAsDataUrl } from '../utils/imageUpload';
+import { ImageCropperModal } from './ImageCropperModal';
 import { ResilientImage } from './ResilientImage';
 
 /* ============================================================================
@@ -369,7 +375,7 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
   const [customImageUrl, setCustomImageUrl] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState('');
   const [pastedUrl, setPastedUrl] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [cropSource, setCropSource] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -380,6 +386,7 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
     setPreviewImage(card.currentImage);
     setCustomImageUrl(card.currentImage !== card.defaultImage ? card.currentImage : null);
     setPastedUrl('');
+    setCropSource(null);
     setErrorMsg(null);
   }, [card]);
 
@@ -390,15 +397,11 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
     e.target.value = '';
     if (!file) return;
     try {
-      setUploading(true);
       setErrorMsg(null);
-      const dataUrl = await compressImageFileToDataUrl(file, 1100, 260_000);
-      setCustomImageUrl(dataUrl);
-      setPreviewImage(dataUrl);
+      const rawUrl = await readFileAsDataUrl(file);
+      setCropSource(rawUrl);
     } catch {
-      setErrorMsg('Could not process selected photo. Try another image.');
-    } finally {
-      setUploading(false);
+      setErrorMsg('Could not read selected photo. Try another image.');
     }
   };
 
@@ -430,7 +433,8 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
         payload.caption = caption.trim().slice(0, 300);
       }
       if (customImageUrl) {
-        payload.imageUrl = customImageUrl;
+        const sanitized = sanitizeImageForFirestore(customImageUrl, card.defaultImage);
+        payload.imageUrl = sanitized ?? '';
       } else {
         payload.imageUrl = '';
       }
@@ -510,18 +514,28 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
             </div>
           )}
 
-          {/* Live Aspect-Locked Photo Preview */}
+          <ImageCropperModal
+            imageSrc={cropSource}
+            maxDimension={1100}
+            maxBytes={220_000}
+            onCancel={() => setCropSource(null)}
+            onApply={(croppedUrl) => {
+              setCustomImageUrl(croppedUrl);
+              setPreviewImage(croppedUrl);
+              setCropSource(null);
+            }}
+          />
+
+          {/* Live Fit Photo Preview */}
           <div>
             <label className="block text-[11px] font-bold text-neutral-700">
-              Photo Preview (Exact Locked Size)
+              Photo Preview (Fits Image Size Automatically)
             </label>
-            <div
-              className={`mt-1.5 relative ${card.aspectClass} w-full overflow-hidden rounded-xl border border-black/10 bg-[#F8F6F4]`}
-            >
+            <div className="mt-1.5 relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-black/10 bg-[#F8F6F4]">
               <ResilientImage
                 src={previewImage || card.defaultImage}
                 alt={title || card.defaultTitle}
-                className="h-full w-full object-cover object-center"
+                className="block max-h-60 w-full h-auto object-contain"
               />
             </div>
 
@@ -535,13 +549,25 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
               />
               <button
                 type="button"
-                disabled={uploading}
+                disabled={saving}
                 onClick={() => fileRef.current?.click()}
                 className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#141414] px-4 text-xs font-bold text-white transition hover:bg-[#EA4E1B] disabled:opacity-50"
               >
                 <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>{uploading ? 'Optimizing...' : 'Upload New Photo'}</span>
+                <span>Upload &amp; Crop Photo</span>
               </button>
+
+              {(previewImage || card.defaultImage) && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setCropSource(previewImage || card.defaultImage)}
+                  className="inline-flex h-9 items-center gap-1 rounded-full border border-[#EA4E1B] bg-white px-3.5 text-xs font-bold text-[#EA4E1B] transition hover:bg-[#EA4E1B] hover:text-white"
+                >
+                  <Crop className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Crop</span>
+                </button>
+              )}
 
               {customImageUrl && (
                 <button
@@ -645,7 +671,7 @@ export const AdminShowcaseCardModal: React.FC<AdminShowcaseCardModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={saving || uploading}
+                disabled={saving}
                 className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#EA4E1B] px-5 text-xs font-bold text-white shadow-sm transition hover:bg-[#d44212] disabled:opacity-60"
               >
                 <Save className="h-3.5 w-3.5" aria-hidden="true" />

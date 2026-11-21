@@ -248,11 +248,12 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({
                   className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-black/5 bg-white shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:border-[#EA4E1B] hover:shadow-md sm:rounded-2xl"
                 >
                   {/* Compact Image Container so 4 products (2x2) fit on mobile screen */}
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4] sm:aspect-square">
+                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
                     <ResilientImage
                       src={product.image}
+                      fallbackSrc={product.galleryImages?.[0]}
                       alt={product.name}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                      className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
                     />
                     {extraPhotosCount > 0 && (
                       <span className="pointer-events-none absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-xs">

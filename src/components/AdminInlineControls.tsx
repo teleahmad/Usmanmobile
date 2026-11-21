@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
   Camera,
   Check,
+  Crop,
   Edit3,
   Images,
   LayoutDashboard,
@@ -19,12 +20,19 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import {
+  CATALOG_PRODUCTS,
   CatalogProduct,
   PRODUCT_CATEGORIES,
+  sanitizeImageForFirestore,
 } from '../data/catalogData';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { SiteMediaSlotKey } from '../hooks/useLiveStoreData';
-import { compressImageFileToDataUrl } from '../utils/imageUpload';
+import {
+  compressImageFileToDataUrl,
+  readFileAsDataUrl,
+  renderCroppedImageToDataUrl,
+} from '../utils/imageUpload';
+import { ImageCropperModal } from './ImageCropperModal';
 import { REMOVED_IMAGE_MARKER, ResilientImage } from './ResilientImage';
 
 /* ============================================================================
@@ -81,6 +89,7 @@ export const AdminModeBanner: React.FC<AdminModeBannerProps> = ({ onOpenDashboar
 interface AdminImageControlsProps {
   slotKey: SiteMediaSlotKey;
   label: string;
+  currentImage?: string;
   hasOverride?: boolean;
   onStatus?: (msg: string) => void;
 }
@@ -88,6 +97,7 @@ interface AdminImageControlsProps {
 export const AdminImageControls: React.FC<AdminImageControlsProps> = ({
   slotKey,
   label,
+  currentImage,
   hasOverride = false,
   onStatus,
 }) => {
@@ -97,6 +107,7 @@ export const AdminImageControls: React.FC<AdminImageControlsProps> = ({
   const [urlOpen, setUrlOpen] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [cropSource, setCropSource] = useState<string | null>(null);
 
   if (!isAdmin) return null;
 
@@ -113,8 +124,17 @@ export const AdminImageControls: React.FC<AdminImageControlsProps> = ({
     if (!file) return;
 
     try {
+      const rawUrl = await readFileAsDataUrl(file);
+      setCropSource(rawUrl);
+    } catch {
+      flash('Upload failed');
+    }
+  };
+
+  const handleApplyCroppedImage = async (dataUrl: string) => {
+    setCropSource(null);
+    try {
       setBusy(true);
-      const dataUrl = await compressImageFileToDataUrl(file, 1100, 260_000);
       await setDoc(
         doc(db, 'siteMedia', slotKey),
         {
@@ -194,11 +214,25 @@ export const AdminImageControls: React.FC<AdminImageControlsProps> = ({
     }
   };
 
+  const canCropCurrent = Boolean(
+    currentImage && currentImage !== REMOVED_IMAGE_MARKER,
+  );
+
   return (
     <div
       onClick={(e) => e.stopPropagation()}
       className="absolute top-2.5 right-2.5 z-20 flex flex-col items-end gap-1.5"
     >
+      <ImageCropperModal
+        imageSrc={cropSource}
+        maxDimension={1100}
+        maxBytes={220_000}
+        onCancel={() => setCropSource(null)}
+        onApply={(croppedUrl) => {
+          void handleApplyCroppedImage(croppedUrl);
+        }}
+      />
+
       <input
         ref={fileInputRef}
         type="file"
@@ -215,12 +249,28 @@ export const AdminImageControls: React.FC<AdminImageControlsProps> = ({
             e.stopPropagation();
             fileInputRef.current?.click();
           }}
-          title={`Upload new ${label}`}
+          title={`Upload & crop ${label}`}
           className="inline-flex items-center gap-1 rounded-full bg-[#EA4E1B] px-2.5 py-1 text-white transition hover:bg-[#d44212] disabled:opacity-50"
         >
           <Upload className="h-3 w-3" aria-hidden="true" />
           <span>{busy ? '...' : 'Change'}</span>
         </button>
+
+        {canCropCurrent && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (currentImage) setCropSource(currentImage);
+            }}
+            title={`Crop ${label}`}
+            className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-white transition hover:bg-white/25 disabled:opacity-50"
+          >
+            <Crop className="h-3 w-3" aria-hidden="true" />
+            <span className="hidden sm:inline">Crop</span>
+          </button>
+        )}
 
         <button
           type="button"
@@ -348,6 +398,11 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<{
+    mode: 'display' | 'gallery-new' | 'gallery-edit';
+    index?: number;
+    src: string;
+  } | null>(null);
 
   // Keep fields synced whenever product changes
   React.useEffect(() => {
@@ -367,6 +422,7 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
     setGalleryUrlInput('');
     setConfirmDelete(false);
     setErrorMsg(null);
+    setCropTarget(null);
   }, [product]);
 
   if (!product || !isAdmin) return null;
@@ -376,14 +432,11 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
     e.target.value = '';
     if (!file) return;
     try {
-      setSaving(true);
       setErrorMsg(null);
-      const dataUrl = await compressImageFileToDataUrl(file, 900, 240_000);
-      setImage(dataUrl);
+      const rawUrl = await readFileAsDataUrl(file);
+      setCropTarget({ mode: 'display', src: rawUrl });
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to process image.');
-    } finally {
-      setSaving(false);
+      setErrorMsg(err?.message || 'Failed to read image for cropping.');
     }
   };
 
@@ -398,13 +451,24 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
       return;
     }
 
+    if (files.length === 1) {
+      try {
+        setErrorMsg(null);
+        const rawUrl = await readFileAsDataUrl(files[0]);
+        setCropTarget({ mode: 'gallery-new', src: rawUrl });
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Failed to read gallery photo.');
+      }
+      return;
+    }
+
     try {
       setSaving(true);
       setErrorMsg(null);
       const selected = files.slice(0, remaining);
       const uploaded: string[] = [];
       for (const file of selected) {
-        const dataUrl = await compressImageFileToDataUrl(file, 800, 115_000);
+        const dataUrl = await compressImageFileToDataUrl(file, 800, 125_000);
         uploaded.push(dataUrl);
       }
       setGalleryImages((prev) => [...prev, ...uploaded].slice(0, 5));
@@ -416,7 +480,7 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
   };
 
   const handleAddGalleryUrl = () => {
-    const clean = galleryUrlInput.trim();
+    const clean = galleryUrlDraftOrValue(galleryUrlInput);
     if (!clean) return;
     if (galleryImages.length >= 5) {
       setErrorMsg('Maximum 5 extra gallery photos allowed per product.');
@@ -427,10 +491,26 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
     setErrorMsg(null);
   };
 
-  const handleMakeGalleryPhotoDisplay = (idx: number) => {
+  function galleryUrlDraftOrValue(val: string) {
+    return val.trim();
+  }
+
+  const handleMakeGalleryPhotoDisplay = async (idx: number) => {
     const picked = galleryImages[idx];
     if (!picked) return;
-    const prevDisplay = image.trim();
+    let prevDisplay = image.trim();
+    if (prevDisplay.startsWith('data:') && prevDisplay.length > 180_000) {
+      try {
+        prevDisplay = await renderCroppedImageToDataUrl(
+          prevDisplay,
+          { x: 0, y: 0, w: 1, h: 1 },
+          800,
+          165_000,
+        );
+      } catch {
+        // keep best effort
+      }
+    }
     setImage(picked);
     setGalleryImages((prev) => {
       const next = [...prev];
@@ -469,10 +549,25 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
       setSaving(true);
       setErrorMsg(null);
 
-      const cleanGallery = galleryImages
-        .map((u) => u.trim())
-        .filter((u) => u.length > 0 && u.length <= 200_000)
-        .slice(0, 5);
+      const baseProduct = CATALOG_PRODUCTS.find((p) => p.id === product.id);
+      const sanitizedDisplay = sanitizeImageForFirestore(image, baseProduct?.image);
+
+      const cleanGallery: string[] = [];
+      for (const rawItem of galleryImages.slice(0, 5)) {
+        let candidate = sanitizeImageForFirestore(rawItem) || '';
+        if (!candidate) continue;
+        if (candidate.startsWith('data:') && candidate.length > 190_000) {
+          candidate = await renderCroppedImageToDataUrl(
+            candidate,
+            { x: 0, y: 0, w: 1, h: 1 },
+            760,
+            150_000,
+          );
+        }
+        if (candidate.length <= 198_000) {
+          cleanGallery.push(candidate);
+        }
+      }
 
       await setDoc(
         doc(db, 'products', product.id),
@@ -495,7 +590,7 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
           specs: specs.trim().slice(0, 240),
           description: description.trim().slice(0, 1000),
           warrantyNote: product.warrantyNote || 'Live check at counter',
-          image: image.trim(),
+          image: sanitizedDisplay === undefined ? '' : sanitizedDisplay,
           galleryImages: cleanGallery,
           variants: parsedVariants.length > 0 ? parsedVariants : ['Standard'],
           updatedAt: new Date().toISOString(),
@@ -588,6 +683,8 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
           </div>
         )}
 
+
+
         <form onSubmit={handleSave} className="mt-4 space-y-4">
           {/* Display Photo (Main Card Image) */}
           <div className="space-y-2.5 rounded-2xl border border-black/8 bg-[#FAF5F0] p-3.5">
@@ -602,9 +699,9 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
+              <div className="h-24 w-28 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
                 {image ? (
-                  <ResilientImage src={image} alt={name} className="h-full w-full object-cover" />
+                  <ResilientImage src={image} alt={name} className="h-full w-full object-contain" />
                 ) : (
                   <div className="grid h-full w-full place-items-center text-neutral-300">
                     <Camera className="h-7 w-7" />
@@ -628,8 +725,21 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
                     className="inline-flex items-center gap-1.5 rounded-full bg-[#141414] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#EA4E1B]"
                   >
                     <Upload className="h-3.5 w-3.5" />
-                    <span>Upload Display Pic</span>
+                    <span>Upload &amp; Crop</span>
                   </button>
+
+
+                  {image && (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => setCropTarget({ mode: 'display', src: image })}
+                      className="inline-flex items-center gap-1 rounded-full border border-[#EA4E1B] bg-white px-3 py-1.5 text-xs font-bold text-[#EA4E1B] transition hover:bg-[#EA4E1B] hover:text-white"
+                    >
+                      <Crop className="h-3.5 w-3.5" />
+                      <span>Crop</span>
+                    </button>
+                  )}
                   {image && (
                     <button
                       type="button"
@@ -652,6 +762,30 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
               </div>
             </div>
           </div>
+
+          <ImageCropperModal
+            imageSrc={cropTarget?.src ?? null}
+            maxDimension={cropTarget?.mode === 'display' ? 860 : 780}
+            maxBytes={cropTarget?.mode === 'display' ? 180_000 : 140_000}
+            onCancel={() => setCropTarget(null)}
+            onApply={(croppedUrl) => {
+              if (!cropTarget) return;
+              if (cropTarget.mode === 'display') {
+                setImage(croppedUrl);
+              } else if (cropTarget.mode === 'gallery-new') {
+                setGalleryImages((prev) => [...prev, croppedUrl].slice(0, 5));
+              } else if (
+                cropTarget.mode === 'gallery-edit' &&
+                typeof cropTarget.index === 'number'
+              ) {
+                const editIdx = cropTarget.index;
+                setGalleryImages((prev) =>
+                  prev.map((item, i) => (i === editIdx ? croppedUrl : item)),
+                );
+              }
+              setCropTarget(null);
+            }}
+          />
 
           {/* Additional Product Gallery Photos (Products Only — up to 5) */}
           <div className="space-y-3 rounded-2xl border border-black/8 bg-neutral-50/90 p-3.5">
@@ -691,13 +825,24 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
                     key={`inline-gallery-${idx}`}
                     className="group relative overflow-hidden rounded-xl border border-black/10 bg-white"
                   >
-                    <div className="aspect-square w-full overflow-hidden">
+                    <div className="aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
                       <ResilientImage
                         src={imgUrl}
                         alt={`Gallery photo ${idx + 1}`}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCropTarget({ mode: 'gallery-edit', index: idx, src: imgUrl })
+                      }
+                      aria-label={`Crop photo ${idx + 1}`}
+                      title="Crop photo"
+                      className="absolute top-1 left-1 grid h-5 w-5 place-items-center rounded-full bg-black/75 text-white hover:bg-[#EA4E1B]"
+                    >
+                      <Crop className="h-2.5 w-2.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleRemoveGalleryPhoto(idx)}
@@ -708,7 +853,7 @@ export const AdminInlineProductModal: React.FC<AdminInlineProductModalProps> = (
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleMakeGalleryPhotoDisplay(idx)}
+                      onClick={() => void handleMakeGalleryPhotoDisplay(idx)}
                       title="Make this the Display Photo"
                       className="block w-full border-t border-black/8 bg-white px-1 py-1 text-center text-[10px] font-bold text-[#141414] transition hover:bg-[#EA4E1B] hover:text-white"
                     >

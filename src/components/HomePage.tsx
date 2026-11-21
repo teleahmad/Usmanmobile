@@ -186,12 +186,13 @@ export const HomePage: React.FC<HomePageProps> = ({
             : 'border border-black/5 shadow-xs'
         } ${extraClassName}`}
       >
-        <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4] sm:aspect-square">
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
           <AdminProductEditTrigger onClick={() => onAdminEditProduct?.(product)} />
           <ResilientImage
             src={product.image}
+            fallbackSrc={product.galleryImages?.[0]}
             alt={product.name}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
           />
           {extraPhotosCount > 0 && (
             <span className="pointer-events-none absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-bold text-white backdrop-blur-xs">
@@ -337,17 +338,19 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             {/* Right Editorial Shop Owner Portrait + Floating Local Proof Card */}
             <div className="relative flex items-end justify-center lg:col-span-6 lg:justify-end">
-              <div className="relative w-full max-w-[560px] overflow-hidden rounded-t-3xl bg-[#ECD8BE]">
+              <div className="relative flex w-full max-w-[560px] items-center justify-center overflow-hidden rounded-t-3xl bg-[#F3ECE6]">
                 <AdminImageControls
                   slotKey="heroLifestyle"
                   label="Hero Photo"
+                  currentImage={siteImages.heroLifestyle}
                   hasOverride={Boolean(mediaOverrides.heroLifestyle)}
                 />
                 <ResilientImage
                   src={siteImages.heroLifestyle}
+                  fallbackSrc={SITE_IMAGES.heroLifestyle}
                   alt="Usman Sarwar inside Usman Mobile Repairing Centre with phone repair tools and accessories"
                   priority
-                  className="aspect-[4/3] w-full object-cover object-center"
+                  className="block max-h-[440px] w-full h-auto object-contain"
                 />
                 {/* Soft left feathered blur + blend into sand canvas */}
                 <div className="pointer-events-none absolute inset-y-0 left-0 w-12 backdrop-blur-[2px] [-webkit-mask-image:linear-gradient(to_right,black_0%,transparent_100%)] [mask-image:linear-gradient(to_right,black_0%,transparent_100%)]" />
@@ -554,16 +557,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </button>
               </div>
               <div className="sm:col-span-6">
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[12px] bg-[#F8F6F4]">
                   <AdminImageControls
                     slotKey="bentoAirpods"
                     label="AirPods Photo"
+                    currentImage={siteImages.bentoAirpods}
                     hasOverride={Boolean(mediaOverrides.bentoAirpods)}
                   />
                   <ResilientImage
                     src={siteImages.bentoAirpods}
+                    fallbackSrc={SITE_IMAGES.bentoAirpods}
                     alt={airpodsTitle}
-                    className="h-full w-full object-cover object-center"
+                    className="block max-h-[340px] w-full h-auto rounded-[12px] object-contain sm:max-h-[380px]"
                   />
                 </div>
               </div>
@@ -607,17 +612,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </button>
               </div>
               <div className="sm:col-span-6">
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+                <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[12px] bg-white">
                   <AdminImageControls
                     slotKey="bentoSmartwatch"
                     label="Smartwatch Photo"
+                    currentImage={siteImages.bentoSmartwatch}
                     hasOverride={Boolean(mediaOverrides.bentoSmartwatch)}
                   />
                   <ResilientImage
                     src={siteImages.bentoSmartwatch}
+                    fallbackSrc={SITE_IMAGES.bentoSmartwatch}
                     alt={smartwatchTitle}
-                    className="h-full w-full object-cover object-center"
+                    className="block max-h-[340px] w-full h-auto rounded-[12px] object-contain sm:max-h-[380px]"
                   />
+                  {/* Slightly rounded corners with subtle feathered edge blur */}
+                  <div className="pointer-events-none absolute inset-0 rounded-[12px] backdrop-blur-[2px] [-webkit-mask-image:radial-gradient(ellipse_78%_74%_at_center,transparent_60%,black_100%)] [mask-image:radial-gradient(ellipse_78%_74%_at_center,transparent_60%,black_100%)]" />
+                  <div className="pointer-events-none absolute -inset-px rounded-[12px] shadow-[inset_0_0_22px_12px_#ffffff]" />
                 </div>
               </div>
             </div>
@@ -668,16 +678,18 @@ export const HomePage: React.FC<HomePageProps> = ({
               </button>
             </div>
             <div className="md:col-span-7">
-              <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-[#F8F6F4]">
+              <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[12px] bg-[#F8F6F4]">
                 <AdminImageControls
                   slotKey="bentoAudioCollection"
                   label="Audio Collection Photo"
+                  currentImage={siteImages.bentoAudioCollection}
                   hasOverride={Boolean(mediaOverrides.bentoAudioCollection)}
                 />
                 <ResilientImage
                   src={siteImages.bentoAudioCollection}
+                  fallbackSrc={SITE_IMAGES.bentoAudioCollection}
                   alt={audioTitle}
-                  className="h-full w-full object-cover object-center"
+                  className="block max-h-[380px] w-full h-auto rounded-[12px] object-contain sm:max-h-[420px]"
                 />
               </div>
             </div>
@@ -725,16 +737,18 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             </div>
             <div className="md:col-span-6">
-              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-white">
+              <div className="relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-white">
                 <AdminImageControls
                   slotKey="realInteriorCounter"
                   label="Shop Interior Photo"
+                  currentImage={siteImages.realInteriorCounter}
                   hasOverride={Boolean(mediaOverrides.realInteriorCounter)}
                 />
                 <ResilientImage
                   src={siteImages.realInteriorCounter}
+                  fallbackSrc={SITE_IMAGES.realInteriorCounter}
                   alt="Real interior view of Usman Mobile Repairing Centre counter and accessories wall"
-                  className="h-full w-full scale-[1.02] object-cover"
+                  className="block max-h-[360px] w-full h-auto object-contain"
                 />
                 {/* Seamless 4-side feathered blur & smooth white dissolve (no corner seams) */}
                 <div className="pointer-events-none absolute inset-0 backdrop-blur-[2.5px] [-webkit-mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)] [mask-image:radial-gradient(ellipse_74%_70%_at_center,transparent_58%,black_100%)]" />

@@ -19,7 +19,12 @@ import {
   X,
 } from 'lucide-react';
 import { deleteDoc, doc, setDoc } from 'firebase/firestore';
-import { formatPkr, PRODUCT_CATEGORIES } from '../data/catalogData';
+import {
+  CATALOG_PRODUCTS,
+  formatPkr,
+  PRODUCT_CATEGORIES,
+  sanitizeImageForFirestore,
+} from '../data/catalogData';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import {
   LiveCatalogProduct,
@@ -27,7 +32,11 @@ import {
   SiteMediaOverride,
   SiteMediaSlotConfig,
 } from '../hooks/useLiveStoreData';
-import { compressImageFileToDataUrl, readFileAsDataUrl } from '../utils/imageUpload';
+import {
+  compressImageFileToDataUrl,
+  readFileAsDataUrl,
+  renderCroppedImageToDataUrl,
+} from '../utils/imageUpload';
 import { ImageCropperModal } from './ImageCropperModal';
 import { ResilientImage } from './ResilientImage';
 
@@ -137,7 +146,11 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
   const [newCategoryDraft, setNewCategoryDraft] = useState('');
 
   // Free-form Cropper state
-  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<{
+    mode: 'display' | 'gallery-new' | 'gallery-edit';
+    index?: number;
+    src: string;
+  } | null>(null);
 
   // Additional gallery photos state (products only)
   const [galleryUrlDraft, setGalleryUrlDraft] = useState('');
@@ -225,7 +238,7 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
     setFeedbackMsg(null);
     try {
       const rawUrl = await readFileAsDataUrl(file);
-      setCropSource(rawUrl);
+      setCropTarget({ mode: 'display', src: rawUrl });
     } catch (err) {
       setFeedbackMsg({
         text: err instanceof Error ? err.message : 'Failed to open image for cropping.',
@@ -250,13 +263,27 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
       return;
     }
 
+    if (files.length === 1) {
+      try {
+        setFeedbackMsg(null);
+        const rawUrl = await readFileAsDataUrl(files[0]);
+        setCropTarget({ mode: 'gallery-new', src: rawUrl });
+      } catch (err) {
+        setFeedbackMsg({
+          text: err instanceof Error ? err.message : 'Failed to open photo for cropping.',
+          type: 'error',
+        });
+      }
+      return;
+    }
+
     setUploadingGallery(true);
     setFeedbackMsg(null);
     try {
       const selected = files.slice(0, remaining);
       const compressed: string[] = [];
       for (const file of selected) {
-        const dataUrl = await compressImageFileToDataUrl(file, 800, 115_000);
+        const dataUrl = await compressImageFileToDataUrl(file, 800, 125_000);
         compressed.push(dataUrl);
       }
       setEditingForm((prev) => ({
@@ -294,12 +321,24 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
     setGalleryUrlDraft('');
   };
 
-  const handleSetGalleryAsDisplay = (index: number) => {
+  const handleSetGalleryAsDisplay = async (index: number) => {
+    const picked = editingForm.galleryImages[index];
+    if (!picked) return;
+    let currentDisplay = editingForm.image.trim();
+    if (currentDisplay.startsWith('data:') && currentDisplay.length > 180_000) {
+      try {
+        currentDisplay = await renderCroppedImageToDataUrl(
+          currentDisplay,
+          { x: 0, y: 0, w: 1, h: 1 },
+          800,
+          165_000,
+        );
+      } catch {
+        // best effort
+      }
+    }
     setEditingForm((prev) => {
-      const picked = prev.galleryImages[index];
-      if (!picked) return prev;
       const nextGallery = [...prev.galleryImages];
-      const currentDisplay = prev.image.trim();
       if (currentDisplay) {
         nextGallery[index] = currentDisplay;
       } else {
@@ -349,17 +388,19 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
 
     const safeId = editingForm.id.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80);
 
-    const cleanGallery = editingForm.galleryImages
-      .map((u) => u.trim())
-      .filter((u) => u.length > 0)
-      .slice(0, 5);
-
-    if (cleanGallery.some((u) => u.length > 200_000)) {
-      setFeedbackMsg({
-        text: 'One of the gallery photos is too large. Please remove and re-upload it.',
-        type: 'error',
-      });
-      return;
+    const baseProduct = CATALOG_PRODUCTS.find((p) => p.id === editingForm.id);
+    const cleanGallery: string[] = [];
+    for (const rawItem of editingForm.galleryImages.slice(0, 5)) {
+      const sanitized = sanitizeImageForFirestore(rawItem) || '';
+      if (!sanitized) continue;
+      if (sanitized.length > 200_000) {
+        setFeedbackMsg({
+          text: 'One of the gallery photos is too large. Please remove and re-upload it.',
+          type: 'error',
+        });
+        return;
+      }
+      cleanGallery.push(sanitized);
     }
 
     const payload: Record<string, unknown> = {
@@ -388,14 +429,22 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
     };
 
     if (editingForm.image.trim()) {
-      if (editingForm.image.length > 350_000) {
-        setFeedbackMsg({
-          text: 'Image size is too large for database storage. Please upload or crop a smaller photo.',
-          type: 'error',
-        });
-        return;
+      const sanitizedDisplay = sanitizeImageForFirestore(
+        editingForm.image,
+        baseProduct?.image,
+      );
+      if (sanitizedDisplay === undefined) {
+        payload.image = '';
+      } else {
+        if (sanitizedDisplay.length > 350_000) {
+          setFeedbackMsg({
+            text: 'Image size is too large for database storage. Please upload or crop a smaller photo.',
+            type: 'error',
+          });
+          return;
+        }
+        payload.image = sanitizedDisplay;
       }
-      payload.image = editingForm.image.trim();
     }
 
     if (editingForm.isNew) {
@@ -585,13 +634,32 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
       )}
       {/* Free-Form Cropper Modal */}
       <ImageCropperModal
-        imageSrc={cropSource}
-        maxDimension={860}
-        maxBytes={230_000}
-        onCancel={() => setCropSource(null)}
+        imageSrc={cropTarget?.src ?? null}
+        maxDimension={cropTarget?.mode === 'display' ? 860 : 780}
+        maxBytes={cropTarget?.mode === 'display' ? 180_000 : 140_000}
+        onCancel={() => setCropTarget(null)}
         onApply={(croppedUrl) => {
-          setEditingForm((prev) => ({ ...prev, image: croppedUrl }));
-          setCropSource(null);
+          if (!cropTarget) return;
+          if (cropTarget.mode === 'display') {
+            setEditingForm((prev) => ({ ...prev, image: croppedUrl }));
+          } else if (cropTarget.mode === 'gallery-new') {
+            setEditingForm((prev) => ({
+              ...prev,
+              galleryImages: [...prev.galleryImages, croppedUrl].slice(0, 5),
+            }));
+          } else if (
+            cropTarget.mode === 'gallery-edit' &&
+            typeof cropTarget.index === 'number'
+          ) {
+            const editIdx = cropTarget.index;
+            setEditingForm((prev) => ({
+              ...prev,
+              galleryImages: prev.galleryImages.map((item, i) =>
+                i === editIdx ? croppedUrl : item,
+              ),
+            }));
+          }
+          setCropTarget(null);
           setFeedbackMsg({ text: 'Photo cropped and ready to save!', type: 'success' });
         }}
       />
@@ -648,12 +716,12 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
+              <div className="relative h-24 w-28 shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white">
                 {editingForm.image ? (
                   <ResilientImage
                     src={editingForm.image}
                     alt="Display Photo Preview"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-neutral-400">
@@ -678,7 +746,9 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
                   {editingForm.image && (
                     <button
                       type="button"
-                      onClick={() => setCropSource(editingForm.image)}
+                      onClick={() =>
+                        setCropTarget({ mode: 'display', src: editingForm.image })
+                      }
                       className="inline-flex items-center gap-1.5 rounded-full border border-[#EA4E1B] bg-white px-3.5 py-2 text-xs font-bold text-[#EA4E1B] transition hover:bg-[#EA4E1B] hover:text-white"
                     >
                       <Crop className="h-3.5 w-3.5" />
@@ -745,13 +815,24 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
                     key={`dash-gallery-${idx}`}
                     className="relative overflow-hidden rounded-xl border border-black/10 bg-white shadow-xs"
                   >
-                    <div className="aspect-square w-full overflow-hidden bg-neutral-100">
+                    <div className="aspect-[4/3] w-full overflow-hidden bg-[#F8F6F4]">
                       <ResilientImage
                         src={imgUrl}
                         alt={`Additional product photo ${idx + 1}`}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCropTarget({ mode: 'gallery-edit', index: idx, src: imgUrl })
+                      }
+                      aria-label={`Crop gallery photo ${idx + 1}`}
+                      title="Crop photo"
+                      className="absolute top-1.5 left-1.5 grid h-6 w-6 place-items-center rounded-full bg-black/75 text-white transition hover:bg-[#EA4E1B]"
+                    >
+                      <Crop className="h-3 w-3" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleRemoveGalleryImage(idx)}
@@ -762,7 +843,7 @@ export const AdminProductsManager: React.FC<AdminProductsManagerProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSetGalleryAsDisplay(idx)}
+                      onClick={() => void handleSetGalleryAsDisplay(idx)}
                       className="block w-full border-t border-black/8 bg-white px-2 py-1.5 text-center text-[11px] font-bold text-[#141414] transition hover:bg-[#EA4E1B] hover:text-white"
                     >
                       Set as Display
@@ -1315,11 +1396,15 @@ export const AdminShopPhotosManager: React.FC<AdminShopPhotosManagerProps> = ({
     setSavingSlot(slot.slotKey);
     setFeedbackMsg(null);
     try {
+      const sanitizedSlotImg = sanitizeImageForFirestore(
+        current.imageUrl,
+        slot.defaultImage,
+      );
       await setDoc(doc(db, 'siteMedia', slot.slotKey), {
         slotKey: slot.slotKey,
         title: current.title.trim().slice(0, 120),
         caption: current.caption.trim().slice(0, 300),
-        imageUrl: current.imageUrl.trim(),
+        imageUrl: sanitizedSlotImg === undefined ? '' : sanitizedSlotImg,
         updatedAt: new Date().toISOString(),
       });
       setDrafts((prev) => {
