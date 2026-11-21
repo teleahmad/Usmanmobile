@@ -60,7 +60,8 @@ export type SiteMediaSlotKey =
   | 'bentoAirpods'
   | 'bentoSmartwatch'
   | 'bentoAudioCollection'
-  | 'aerialMap';
+  | 'aerialMap'
+  | 'monitorScreen';
 
 export interface SiteMediaOverride {
   slotKey: SiteMediaSlotKey;
@@ -170,6 +171,14 @@ export const SITE_MEDIA_SLOTS: SiteMediaSlotConfig[] = [
     defaultTitle: 'Home Hero Photo',
     defaultCaption: 'Main hero showcase on the website landing section.',
     defaultImage: SITE_IMAGES.heroLifestyle,
+  },
+  {
+    slotKey: 'monitorScreen',
+    label: '3D Counter Monitor Screenshot (3D مانیٹر سکرین تصویر)',
+    description: 'Custom HD screenshot displayed on the 3D counter PC monitor in virtual shop',
+    defaultTitle: '3D Counter Monitor Screen',
+    defaultCaption: 'High-resolution custom screen display on shop counter PC.',
+    defaultImage: '',
   },
 ];
 
@@ -555,6 +564,7 @@ export function useLiveStoreData() {
       bentoSmartwatch: resolveSlot('bentoSmartwatch'),
       bentoAudioCollection: resolveSlot('bentoAudioCollection'),
       aerialMap: resolveSlot('aerialMap'),
+      monitorScreen: resolveSlot('monitorScreen'),
     };
   }, [mediaOverrides, mediaReady]);
 

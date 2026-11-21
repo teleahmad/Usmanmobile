@@ -235,6 +235,15 @@ export const SHOP_PRODUCTS: Record<string, ShopProductDetail> = {
     badge: 'Instant Service',
     accent: '#22C55E',
   },
+  'Website Monitor': {
+    id: 'Website Monitor',
+    name: 'Usman Mobile Website',
+    category: 'Live Storefront',
+    specs: 'Scroll / 2-Finger Zoom closer or tap screen to open Home Page',
+    highlight: 'Interactive store display right on our counter PC',
+    badge: 'Home Page',
+    accent: '#EA4E1B',
+  },
 };
 
 export function getShopProduct(key: string): ShopProductDetail {

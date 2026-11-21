@@ -1717,56 +1717,449 @@ export function createRoundTinTexture(
   );
 }
 
-export function createPosMonitorTexture(maxAnisotropy: number): THREE.CanvasTexture {
-  return makeCanvasTexture(
-    384,
-    256,
-    (ctx, w, h) => {
-      ctx.fillStyle = '#09152B';
+function fillRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+export interface MonitorPreviewOptions {
+  heroImageUrl?: string;
+  fallbackHeroUrl?: string;
+  monitorScreenImg?: string;
+  logoUrl?: string;
+  reviewsVisible?: boolean;
+  reviewCount?: number;
+  reviewAvg?: string;
+  reviewInitials?: string[];
+  onUpdated?: () => void;
+}
+
+export function createPosMonitorTexture(
+  maxAnisotropy: number,
+  options?: MonitorPreviewOptions,
+): THREE.CanvasTexture & { updatePreview?: (next: MonitorPreviewOptions) => void } {
+  const w = 3840;
+  const h = 2400;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+  }
+
+  const tex = new THREE.CanvasTexture(canvas) as THREE.CanvasTexture & {
+    updatePreview?: (next: MonitorPreviewOptions) => void;
+  };
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = maxAnisotropy;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+
+  let currentOpts: MonitorPreviewOptions = { reviewsVisible: true, ...(options || {}) };
+  let heroImg: HTMLImageElement | null = null;
+  let logoImg: HTMLImageElement | null = null;
+  let monitorScreenImgObj: HTMLImageElement | null = null;
+  let loadedHeroSrc = '';
+  let loadedLogoSrc = '';
+  let loadedMonitorScreenSrc = '';
+
+  const redraw = () => {
+    if (!ctx) return;
+
+    if (monitorScreenImgObj && monitorScreenImgObj.complete && monitorScreenImgObj.naturalWidth > 0) {
+      ctx.fillStyle = '#141414';
       ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(monitorScreenImgObj, 0, 0, w, h);
+      tex.needsUpdate = true;
+      currentOpts.onUpdated?.();
+      return;
+    }
 
-      // Top bar
-      ctx.fillStyle = '#1769FF';
-      ctx.fillRect(0, 0, w, 40);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '800 16px "Plus Jakarta Sans", system-ui, sans-serif';
-      ctx.fillText('USMAN MOBILE · POS & REPAIR LAB', 14, 26);
+    // 1. Warm Sand Canvas Background (#F3ECE6)
+    ctx.fillStyle = '#F3ECE6';
+    ctx.fillRect(0, 0, w, h);
 
-      // Service status tiles
-      const tiles = [
-        { x: 14, y: 54, bg: '#16A34A', t: 'EASYPAISA', s: 'ONLINE' },
-        { x: 136, y: 54, bg: '#DC2626', t: 'JAZZCASH', s: 'ONLINE' },
-        { x: 258, y: 54, bg: '#0284C7', t: 'FLASH / UNLOCK', s: 'READY' },
-      ];
-      tiles.forEach((tile) => {
-        ctx.fillStyle = tile.bg;
-        ctx.fillRect(tile.x, tile.y, 112, 62);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '800 13px "Plus Jakarta Sans", system-ui, sans-serif';
-        ctx.fillText(tile.t, tile.x + 8, tile.y + 26);
-        ctx.fillStyle = '#FEF08A';
-        ctx.font = '700 11px monospace';
-        ctx.fillText(tile.s, tile.x + 8, tile.y + 48);
-      });
+    // 2. Sticky Header Bar
+    ctx.fillStyle = '#F3ECE6';
+    ctx.fillRect(0, 0, w, 78);
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.06)';
+    ctx.fillRect(0, 77, w, 1.5);
 
-      // Live diagnostic schematic area
-      ctx.fillStyle = '#0F2242';
-      ctx.fillRect(14, 130, w - 28, 110);
-      ctx.strokeStyle = '#38BDF8';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      for (let x = 24; x < w - 24; x += 12) {
-        const y = 186 + Math.sin(x * 0.14) * 22 * (x % 36 === 0 ? 1.3 : 0.6);
-        if (x === 24) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
+    // Brand Logo Image or UM Badge
+    const logoX = 56;
+    const logoY = 17;
+    const logoSize = 44;
+    if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+      ctx.save();
+      fillRoundedRect(ctx, logoX, logoY, logoSize, logoSize, 12);
+      ctx.clip();
+      ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(20, 20, 20, 0.1)';
+      ctx.lineWidth = 1.5;
+      fillRoundedRect(ctx, logoX, logoY, logoSize, logoSize, 12);
       ctx.stroke();
-      ctx.fillStyle = '#4ADE80';
-      ctx.font = '700 13px monospace';
-      ctx.fillText('USB-C DIAGNOSTIC: 5.1V / 2.4A  •  ALL SYSTEMS OK', 24, 228);
-    },
-    maxAnisotropy,
-  );
+    } else {
+      ctx.fillStyle = '#EA4E1B';
+      fillRoundedRect(ctx, logoX, logoY, logoSize, logoSize, 12);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '800 18px "Plus Jakarta Sans", system-ui, sans-serif';
+      ctx.fillText('UM', logoX + 7, logoY + 29);
+    }
+
+    // Brand Wordmark
+    ctx.fillStyle = '#141414';
+    ctx.font = '800 19px "Plus Jakarta Sans", system-ui, sans-serif';
+    const brandLeft = 'Usman Mobile';
+    ctx.fillText(brandLeft, 112, 37);
+    const brandLeftW = ctx.measureText(brandLeft).width;
+    ctx.fillStyle = '#EA4E1B';
+    ctx.fillText(' Repairing Centre', 112 + brandLeftW, 37);
+
+    ctx.fillStyle = '#525252';
+    ctx.font = '600 12px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Expert Phone Repairs · Original Accessories', 112, 56);
+
+    // Center Nav Links
+    const navItems = ['Home', 'Products', 'Repairs', '3D Shop', 'Contact Us'];
+    let navX = 505;
+    navItems.forEach((lbl, idx) => {
+      ctx.fillStyle = idx === 0 ? '#141414' : '#525252';
+      ctx.font =
+        idx === 0
+          ? '700 15px "Plus Jakarta Sans", system-ui, sans-serif'
+          : '500 15px "Plus Jakarta Sans", system-ui, sans-serif';
+      ctx.fillText(lbl, navX, 45);
+      const lw = ctx.measureText(lbl).width;
+      if (idx === 0) {
+        ctx.fillStyle = '#EA4E1B';
+        ctx.fillRect(navX, 52, lw, 2.5);
+      }
+      navX += lw + 32;
+    });
+
+    // Right Header Pills: [اردو] and [Cart]
+    ctx.fillStyle = '#FFFFFF';
+    fillRoundedRect(ctx, 1006, 20, 84, 38, 19);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20, 20, 20, 0.14)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#141414';
+    ctx.font = '700 14px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('اردو', 1048, 44);
+
+    ctx.fillStyle = '#EA4E1B';
+    fillRoundedRect(ctx, 1104, 18, 118, 42, 21);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 15px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Cart', 1163, 44);
+    ctx.textAlign = 'left';
+
+    // 3. Global Search Bar + Popular Chips Row
+    ctx.fillStyle = '#FAF5F0';
+    ctx.fillRect(0, 78, w, 126);
+    ctx.fillStyle = 'rgba(20, 20, 20, 0.05)';
+    ctx.fillRect(0, 203, w, 1.5);
+
+    ctx.fillStyle = '#FFFFFF';
+    fillRoundedRect(ctx, 168, 96, 944, 52, 26);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20, 20, 20, 0.11)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '500 15px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Search covers, 65W charger, AirPods, LCD, or phone model...', 204, 127);
+
+    ctx.fillStyle = '#EA4E1B';
+    fillRoundedRect(ctx, 998, 102, 106, 40, 20);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 14px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Search', 1051, 127);
+    ctx.textAlign = 'left';
+
+    // Popular chips
+    ctx.fillStyle = '#525252';
+    ctx.font = '700 13px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Popular:', 326, 179);
+    const chips = ['Infinix Cover', '65W Charger', 'AirPods', '9D Glass', 'LCD Repair'];
+    let chipX = 392;
+    chips.forEach((chip) => {
+      ctx.font = '600 12.5px "Plus Jakarta Sans", system-ui, sans-serif';
+      const cw = ctx.measureText(chip).width + 26;
+      ctx.fillStyle = '#FFFFFF';
+      fillRoundedRect(ctx, chipX, 161, cw, 28, 14);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20, 20, 20, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#262626';
+      ctx.fillText(chip, chipX + 13, 179);
+      chipX += cw + 10;
+    });
+
+    // Bottom White Section Strip (matching HomePage transition into Trending section)
+    const heroBottomY = 720;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, heroBottomY, w, h - heroBottomY);
+
+    // 4. Hero Section (exact layout match to HomePage!)
+    const heroTop = 248;
+    const leftX = 56;
+
+    ctx.fillStyle = '#525252';
+    ctx.font = '600 14px Georgia, serif';
+    ctx.fillText('Usman Mobile Repairing Centre · Hussain Khan Wala, Chak No. 8,', leftX, heroTop + 14);
+    ctx.fillText('Pattoki', leftX, heroTop + 34);
+
+    // Headline: Elevate Your / Mobile Experience
+    ctx.fillStyle = '#141414';
+    ctx.font = '800 58px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Elevate Your', leftX, heroTop + 102);
+
+    ctx.fillStyle = '#EA4E1B';
+    const mobileWord = 'Mobile';
+    ctx.fillText(mobileWord, leftX, heroTop + 162);
+    const mobileW = ctx.measureText(mobileWord).width;
+    ctx.fillStyle = '#141414';
+    ctx.fillText(' Experience', leftX + mobileW, heroTop + 162);
+
+    // Urdu shop title
+    ctx.fillStyle = '#404040';
+    ctx.font = '700 22px "Noto Nastaliq Urdu", system-ui, sans-serif';
+    ctx.fillText('عثمان موبائل اینڈ ریپئرنگ سینٹر', leftX, heroTop + 214);
+
+    // Body copy
+    ctx.fillStyle = '#525252';
+    ctx.font = '400 17px "Times New Roman", Georgia, serif';
+    ctx.fillText('Tested chargers, AirPods, covers, used phones & same-day phone', leftX, heroTop + 260);
+    ctx.fillText('repair — plus Easypaisa, JazzCash & interactive 3D shop', leftX, heroTop + 286);
+    ctx.fillText('walkthrough.', leftX, heroTop + 312);
+
+    // Hero CTA Pills
+    ctx.fillStyle = '#EA4E1B';
+    fillRoundedRect(ctx, leftX, heroTop + 346, 176, 52, 26);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 16px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Shop Now', leftX + 28, heroTop + 378);
+    ctx.beginPath();
+    ctx.arc(leftX + 146, heroTop + 372, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#EA4E1B';
+    ctx.font = '800 15px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('→', leftX + 146, heroTop + 377);
+
+    ctx.fillStyle = '#FFFFFF';
+    fillRoundedRect(ctx, leftX + 190, heroTop + 346, 182, 52, 26);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20, 20, 20, 0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#141414';
+    ctx.font = '700 16px "Plus Jakarta Sans", system-ui, sans-serif';
+    ctx.fillText('Visit 3D Shop', leftX + 286, heroTop + 378);
+    ctx.textAlign = 'left';
+
+    // 5. Right Hero Photo Card (Actual Shop Photo flush with bottom strip, rounded-t-3xl)
+    const photoX = 648;
+    const photoY = 282;
+    const photoW = 576;
+    const photoH = heroBottomY - photoY;
+    const topRadius = 28;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(photoX + topRadius, photoY);
+    ctx.lineTo(photoX + photoW - topRadius, photoY);
+    ctx.arcTo(photoX + photoW, photoY, photoX + photoW, photoY + topRadius, topRadius);
+    ctx.lineTo(photoX + photoW, photoY + photoH);
+    ctx.lineTo(photoX, photoY + photoH);
+    ctx.lineTo(photoX, photoY + topRadius);
+    ctx.arcTo(photoX, photoY, photoX + topRadius, photoY, topRadius);
+    ctx.closePath();
+    ctx.clip();
+
+    if (heroImg && heroImg.complete && heroImg.naturalWidth > 0) {
+      const imgRatio = heroImg.naturalWidth / heroImg.naturalHeight;
+      const boxRatio = photoW / photoH;
+      let dw = photoW;
+      let dh = photoH;
+      let dx = photoX;
+      let dy = photoY;
+      if (imgRatio > boxRatio) {
+        dh = photoH;
+        dw = photoH * imgRatio;
+        dx = photoX - (dw - photoW) * 0.5;
+      } else {
+        dw = photoW;
+        dh = photoW / imgRatio;
+        dy = photoY - (dh - photoH) * 0.35;
+      }
+      ctx.drawImage(heroImg, dx, dy, dw, dh);
+    } else {
+      const fallbackGrad = ctx.createLinearGradient(photoX, photoY, photoX + photoW, photoY + photoH);
+      fallbackGrad.addColorStop(0, '#ECD8BE');
+      fallbackGrad.addColorStop(1, '#D8C3A5');
+      ctx.fillStyle = fallbackGrad;
+      ctx.fillRect(photoX, photoY, photoW, photoH);
+    }
+
+    // Soft left fade blending photo cleanly into #F3ECE6 just like HomePage.tsx
+    const edgeGrad = ctx.createLinearGradient(photoX, 0, photoX + 68, 0);
+    edgeGrad.addColorStop(0, '#F3ECE6');
+    edgeGrad.addColorStop(0.55, 'rgba(243, 236, 230, 0.45)');
+    edgeGrad.addColorStop(1, 'rgba(243, 236, 230, 0)');
+    ctx.fillStyle = edgeGrad;
+    ctx.fillRect(photoX, photoY, 68, photoH);
+    ctx.restore();
+
+    // Compact Floating "Our Reviews" Card at bottom-left of hero photo
+    if (currentOpts.reviewsVisible !== false) {
+      const cardX = 678;
+      const cardY = 594;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.14)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 6;
+      ctx.fillStyle = '#FFFFFF';
+      fillRoundedRect(ctx, cardX, cardY, 206, 98, 20);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = '#141414';
+      ctx.font = '700 13px "Plus Jakarta Sans", system-ui, sans-serif';
+      ctx.fillText('Our Reviews', cardX + 20, cardY + 32);
+
+      const initials = currentOpts.reviewInitials?.length
+        ? currentOpts.reviewInitials.slice(0, 3)
+        : ['M', 'AA', 'HM'];
+      const rCount = currentOpts.reviewCount ?? 0;
+      const rAvg = currentOpts.reviewAvg || '5.0';
+
+      if (rCount > 0) {
+        initials.forEach((init, idx) => {
+          const cx = cardX + 34 + idx * 22;
+          const cy = cardY + 64;
+          ctx.fillStyle = '#141414';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '800 10px "Plus Jakarta Sans", system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(init, cx, cy + 3.5);
+        });
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#141414';
+        ctx.font = '800 14px "Plus Jakarta Sans", system-ui, sans-serif';
+        ctx.fillText(`${rAvg} ★ · ${rCount}`, cardX + 106, cardY + 69);
+      } else {
+        ctx.fillStyle = '#525252';
+        ctx.font = '700 13px "Plus Jakarta Sans", system-ui, sans-serif';
+        ctx.fillText('Write a review', cardX + 20, cardY + 66);
+      }
+    }
+
+    tex.needsUpdate = true;
+    currentOpts.onUpdated?.();
+  };
+
+  const loadHeroImage = (src: string, fallbackSrc?: string) => {
+    const img = new Image();
+    if (/^https?:\/\//i.test(src)) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => {
+      heroImg = img;
+      redraw();
+    };
+    img.onerror = () => {
+      if (fallbackSrc && fallbackSrc !== src) {
+        loadedHeroSrc = fallbackSrc;
+        loadHeroImage(fallbackSrc);
+      }
+    };
+    img.src = src;
+  };
+
+  const syncImages = () => {
+    const nextScreen = currentOpts.monitorScreenImg?.trim() || '';
+    if (nextScreen !== loadedMonitorScreenSrc) {
+      loadedMonitorScreenSrc = nextScreen;
+      if (!nextScreen) {
+        monitorScreenImgObj = null;
+        redraw();
+      } else {
+        const img = new Image();
+        if (/^https?:\/\//i.test(nextScreen)) {
+          img.crossOrigin = 'anonymous';
+        }
+        img.onload = () => {
+          monitorScreenImgObj = img;
+          redraw();
+        };
+        img.src = nextScreen;
+      }
+    }
+
+    const nextHero = currentOpts.heroImageUrl?.trim() || currentOpts.fallbackHeroUrl?.trim() || '';
+    const nextLogo = currentOpts.logoUrl?.trim() || '/pwa-192x192.png';
+
+    if (nextHero && nextHero !== loadedHeroSrc) {
+      loadedHeroSrc = nextHero;
+      loadHeroImage(nextHero, currentOpts.fallbackHeroUrl?.trim());
+    }
+
+    if (nextLogo && nextLogo !== loadedLogoSrc) {
+      loadedLogoSrc = nextLogo;
+      const img = new Image();
+      if (/^https?:\/\//i.test(nextLogo)) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onload = () => {
+        logoImg = img;
+        redraw();
+      };
+      img.src = nextLogo;
+    }
+  };
+
+  tex.updatePreview = (next: MonitorPreviewOptions) => {
+    currentOpts = { ...currentOpts, ...next };
+    redraw();
+    syncImages();
+  };
+
+  redraw();
+  syncImages();
+  return tex;
 }
 
 export function createReworkStationTexture(maxAnisotropy: number): THREE.CanvasTexture {

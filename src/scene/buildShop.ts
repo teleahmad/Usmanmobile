@@ -20,6 +20,7 @@ import {
   createSolarCellTexture,
   createStorefrontLowerPosterTexture,
   createWhiteMarbleTexture,
+  MonitorPreviewOptions,
   RetailIconType,
 } from './materials';
 
@@ -35,10 +36,13 @@ export interface BuiltShop {
   shopGroup: THREE.Group;
   shutterGroup: THREE.Group;
   shutterHitTarget: THREE.Mesh;
+  monitorScreen: THREE.Mesh;
+  monitorHitTarget: THREE.Mesh;
   warmLight: THREE.PointLight;
   porchLight: THREE.PointLight;
   interactiveItems: InteractiveShopItem[];
   setShutterOpen: (openAmount: number) => void;
+  updateMonitorPreview: (next: MonitorPreviewOptions) => void;
 }
 
 function addBox(
@@ -86,6 +90,7 @@ export function buildShopModel(
   maxAnisotropy: number,
   isSoftwareGl: boolean,
   onSignReady?: () => void,
+  initialMonitorPreview?: MonitorPreviewOptions,
 ): BuiltShop {
   const [SW, SD, SH] = SHOP_CONFIG.SHOP_SIZE; // 6.0m wide x 5.0m deep x 3.2m tall
   const DOOR_OPENING_W = 4.25;
@@ -860,21 +865,36 @@ export function buildShopModel(
   registerInteractive(budsBox, 'AirPods Pro', [0.035, 0.055, 0]);
 
   // On top of the glass counter:
-  // 1) Black Desktop LCD Monitor near front window with crisp POS & Repair Lab interface!
+  // 1) Widescreen Desktop LCD Monitor facing the customer with live Website Home Page!
   const monGroup = new THREE.Group();
-  monGroup.position.set(0.05, 1.07, 0.78);
-  monGroup.rotation.y = 0.24;
+  monGroup.position.set(0.06, 1.07, 0.72);
+  monGroup.rotation.y = 0.44;
   counterGroup.add(monGroup);
-  addBox(monGroup, 0.18, 0.02, 0.22, darkMetalMat, 0, 0.01, 0);
-  addBox(monGroup, 0.05, 0.16, 0.06, darkMetalMat, -0.02, 0.09, 0);
-  addBox(monGroup, 0.05, 0.38, 0.5, darkMetalMat, 0, 0.32, 0, true);
+  addBox(monGroup, 0.19, 0.02, 0.25, darkMetalMat, 0, 0.01, 0);
+  addBox(monGroup, 0.048, 0.16, 0.06, darkMetalMat, -0.02, 0.09, 0);
+  addBox(monGroup, 0.044, 0.39, 0.6, darkMetalMat, 0, 0.34, 0, true);
+  // Subtle burnt-orange power LED indicator on bottom bezel
+  const ledMat = new THREE.MeshBasicMaterial({ color: 0xea4e1b });
+  addBox(monGroup, 0.008, 0.008, 0.036, ledMat, 0.022, 0.155, 0);
+  const posMonitorTex = createPosMonitorTexture(maxAnisotropy, {
+    ...initialMonitorPreview,
+    onUpdated: onSignReady,
+  });
   const posScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.45, 0.32),
-    new THREE.MeshBasicMaterial({ map: createPosMonitorTexture(maxAnisotropy) }),
+    new THREE.PlaneGeometry(0.56, 0.35),
+    new THREE.MeshBasicMaterial({ map: posMonitorTex }),
   );
-  posScreen.position.set(-0.028, 0.32, 0);
-  posScreen.rotation.y = -Math.PI / 2;
+  posScreen.position.set(0.024, 0.34, 0);
+  posScreen.rotation.y = Math.PI / 2;
   monGroup.add(posScreen);
+
+  const monitorHitTarget = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.66, 0.45),
+    new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }),
+  );
+  monitorHitTarget.position.set(0.026, 0.34, 0);
+  monitorHitTarget.rotation.y = Math.PI / 2;
+  monGroup.add(monitorHitTarget);
 
   // 2) Interactive Blue QR Payment Standee ("SCAN TO PAY · EASYPAISA / RAAST") on top of counter
   const qrStand = new THREE.Mesh(
@@ -1205,9 +1225,17 @@ export function buildShopModel(
     shopGroup,
     shutterGroup,
     shutterHitTarget,
+    monitorScreen: posScreen,
+    monitorHitTarget,
     warmLight,
     porchLight,
     interactiveItems,
     setShutterOpen,
+    updateMonitorPreview: (next: MonitorPreviewOptions) => {
+      posMonitorTex.updatePreview?.({
+        ...next,
+        onUpdated: onSignReady,
+      });
+    },
   };
 }

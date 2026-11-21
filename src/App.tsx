@@ -27,6 +27,7 @@ import {
   CartItem,
   CatalogProduct,
   ProductCategory,
+  SITE_IMAGES,
   SitePage,
 } from './data/catalogData';
 import { useLiveStoreData } from './hooks/useLiveStoreData';
@@ -104,6 +105,12 @@ export default function App() {
   const [inspectedProduct, setInspectedProduct] = useState<CatalogProduct | null>(null);
   const [editingAdminProduct, setEditingAdminProduct] = useState<CatalogProduct | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [enteringFromMonitor, setEnteringFromMonitor] = useState(false);
+  const [shopRevealUnderlay, setShopRevealUnderlay] = useState(false);
+  const [homeEnterPhase, setHomeEnterPhase] = useState<'idle' | 'pre' | 'animating'>(
+    'idle',
+  );
+  const monitorTransitionTimersRef = useRef<number[]>([]);
 
   const {
     products: liveProducts,
@@ -118,6 +125,41 @@ export default function App() {
     shopGallery: liveShopGallery,
     mediaOverrides,
   } = useLiveStoreData();
+
+  const genuineReviewsList = useMemo(
+    () => liveReviews.filter((r) => !hiddenReviewIds.includes(r.id)),
+    [liveReviews, hiddenReviewIds],
+  );
+
+  const monitorPreview = useMemo(() => {
+    const count = genuineReviewsList.length;
+    const avg =
+      count > 0
+        ? (
+            genuineReviewsList.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) /
+            count
+          ).toFixed(1)
+        : undefined;
+    const initials = genuineReviewsList.slice(0, 3).map(
+      (r) =>
+        r.customerName
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => w[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() || 'UM',
+    );
+    return {
+      heroImageUrl: liveSiteImages.heroLifestyle,
+      fallbackHeroUrl: SITE_IMAGES.heroLifestyle,
+      monitorScreenImg: liveSiteImages.monitorScreen,
+      reviewsVisible,
+      reviewCount: count,
+      reviewAvg: avg,
+      reviewInitials: initials,
+    };
+  }, [liveSiteImages.heroLifestyle, liveSiteImages.monitorScreen, reviewsVisible, genuineReviewsList]);
 
   // 3D Virtual Shop & Map state (mobile defaults to 3D shop, desktop defaults to full village map)
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
@@ -250,9 +292,18 @@ export default function App() {
     [cartItems],
   );
 
+  const clearMonitorTransitionTimers = useCallback(() => {
+    monitorTransitionTimersRef.current.forEach((id) => window.clearTimeout(id));
+    monitorTransitionTimersRef.current = [];
+  }, []);
+
   const handleNavigate = useCallback((page: SitePage, sectionHash?: string) => {
     setCartOpen(false);
     setWhatsAppOpen(false);
+    clearMonitorTransitionTimers();
+    setEnteringFromMonitor(false);
+    setShopRevealUnderlay(false);
+    setHomeEnterPhase('idle');
     if (page === 'products') {
       setInitialProductCategory('All');
     }
@@ -272,23 +323,35 @@ export default function App() {
     } else {
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     }
-  }, [insideShop]);
+  }, [insideShop, clearMonitorTransitionTimers]);
 
   const handleToggleAdmin = useCallback(() => {
     setCartOpen(false);
+    clearMonitorTransitionTimers();
+    setEnteringFromMonitor(false);
+    setShopRevealUnderlay(false);
+    setHomeEnterPhase('idle');
     setActivePage((prev) => (prev === 'admin' ? 'home' : 'admin'));
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [clearMonitorTransitionTimers]);
 
   const handleBrowseCategory = useCallback((category: ProductCategory) => {
     setCartOpen(false);
+    clearMonitorTransitionTimers();
+    setEnteringFromMonitor(false);
+    setShopRevealUnderlay(false);
+    setHomeEnterPhase('idle');
     setInitialProductCategory(category);
     setActivePage('products');
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-  }, []);
+  }, [clearMonitorTransitionTimers]);
 
   const handleOpenVirtualShop = useCallback((initialMode: ViewMode) => {
     setCartOpen(false);
+    clearMonitorTransitionTimers();
+    setEnteringFromMonitor(false);
+    setShopRevealUnderlay(false);
+    setHomeEnterPhase('idle');
     setEditPinMode(false);
     setSelectedItemType(null);
     const resolvedMode: ViewMode =
@@ -299,7 +362,7 @@ export default function App() {
     }
     setActivePage('virtual-shop');
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-  }, []);
+  }, [clearMonitorTransitionTimers]);
 
   const handleAddToCart = useCallback(
     (product: CatalogProduct, variant?: string, quantity = 1) => {
@@ -381,6 +444,46 @@ export default function App() {
     setSelectedItemType(itemType);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      clearMonitorTransitionTimers();
+    };
+  }, [clearMonitorTransitionTimers]);
+
+  const handleStartEnterHomeFromMonitor = useCallback(() => {
+    setSelectedItemType(null);
+    setHoveredItemType(null);
+    setInfoOpen(false);
+    setEnteringFromMonitor(true);
+  }, []);
+
+  const handleEnterHomeFromMonitor = useCallback(() => {
+    clearMonitorTransitionTimers();
+    setSelectedItemType(null);
+    setHoveredItemType(null);
+    setInfoOpen(false);
+    setShopRevealUnderlay(true);
+    setHomeEnterPhase('pre');
+    setInsideShop(false);
+    setActivePage('home');
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+
+    let raf2 = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        setHomeEnterPhase('animating');
+      });
+    });
+
+    const cleanupTimer = window.setTimeout(() => {
+      setShopRevealUnderlay(false);
+      setEnteringFromMonitor(false);
+      setHomeEnterPhase('idle');
+    }, 480);
+
+    monitorTransitionTimersRef.current = [raf1, raf2, cleanupTimer];
+  }, [clearMonitorTransitionTimers]);
+
   const handleShopUvChange = useCallback((nextUv: [number, number]) => {
     setShopUv(nextUv);
     saveShopUv(nextUv);
@@ -419,35 +522,55 @@ export default function App() {
       )}
 
       {activePage !== 'virtual-shop' && activePage !== 'admin' && (
-        <GlobalSearchBar
-          query={globalSearchQuery}
-          onQueryChange={setGlobalSearchQuery}
-          activePage={activePage}
-          products={liveProducts}
-          onInspectProduct={handleInspectProduct}
-          onQuickAddToCart={(product) => handleAddToCart(product)}
-          onNavigate={handleNavigate}
-          onAdminEditProduct={setEditingAdminProduct}
-        />
+        <div
+          className={
+            homeEnterPhase === 'pre'
+              ? 'relative z-20 origin-bottom scale-[0.96] opacity-0 transition-all duration-[460ms] ease-[cubic-bezier(0.16,1,0.3,1)]'
+              : homeEnterPhase === 'animating'
+                ? 'relative z-20 origin-bottom scale-100 opacity-100 transition-all duration-[460ms] ease-[cubic-bezier(0.16,1,0.3,1)]'
+                : undefined
+          }
+        >
+          <GlobalSearchBar
+            query={globalSearchQuery}
+            onQueryChange={setGlobalSearchQuery}
+            activePage={activePage}
+            products={liveProducts}
+            onInspectProduct={handleInspectProduct}
+            onQuickAddToCart={(product) => handleAddToCart(product)}
+            onNavigate={handleNavigate}
+            onAdminEditProduct={setEditingAdminProduct}
+          />
+        </div>
       )}
 
       <main className="flex-1">
         {activePage === 'home' && (
-          <HomePage
-            products={liveProducts}
-            liveReviews={liveReviews}
-            hiddenReviewIds={hiddenReviewIds}
-            reviewsVisible={reviewsVisible}
-            homeSections={homeSections}
-            siteImages={liveSiteImages}
-            mediaOverrides={mediaOverrides}
-            onNavigate={handleNavigate}
-            onBrowseCategory={handleBrowseCategory}
-            onOpenVirtualShop={handleOpenVirtualShop}
-            onInspectProduct={handleInspectProduct}
-            onQuickAddToCart={(product) => handleAddToCart(product)}
-            onAdminEditProduct={setEditingAdminProduct}
-          />
+          <div
+            className={
+              homeEnterPhase === 'pre'
+                ? 'relative z-20 origin-center scale-[0.95] opacity-0 transition-all duration-[460ms] ease-[cubic-bezier(0.16,1,0.3,1)]'
+                : homeEnterPhase === 'animating'
+                  ? 'relative z-20 origin-center scale-100 opacity-100 transition-all duration-[460ms] ease-[cubic-bezier(0.16,1,0.3,1)]'
+                  : undefined
+            }
+          >
+            <HomePage
+              products={liveProducts}
+              liveReviews={liveReviews}
+              hiddenReviewIds={hiddenReviewIds}
+              reviewsVisible={reviewsVisible}
+              homeSections={homeSections}
+              siteImages={liveSiteImages}
+              mediaOverrides={mediaOverrides}
+              onNavigate={handleNavigate}
+              onBrowseCategory={handleBrowseCategory}
+              onOpenVirtualShop={handleOpenVirtualShop}
+              onInspectProduct={handleInspectProduct}
+              onQuickAddToCart={(product) => handleAddToCart(product)}
+              onAdminEditProduct={setEditingAdminProduct}
+            />
+          </div>
         )}
 
         {activePage === 'products' && (
@@ -499,15 +622,22 @@ export default function App() {
           </Suspense>
         )}
 
-        {activePage === 'virtual-shop' && (
+        {(activePage === 'virtual-shop' || shopRevealUnderlay) && (
           <Suspense fallback={<PageLoader dark />}>
-            <div className="relative h-[calc(100dvh-4rem)] w-full overflow-hidden overscroll-none bg-[#0A1120] select-none">
+            <div
+              className={
+                shopRevealUnderlay
+                  ? 'pointer-events-none fixed inset-x-0 top-16 bottom-0 z-10 overflow-hidden bg-[#0A1120] select-none'
+                  : 'relative h-[calc(100dvh-4rem)] w-full overflow-hidden overscroll-none bg-[#0A1120] select-none'
+              }
+            >
               <ShopViewport
                 viewMode={viewMode}
                 panoTab={panoTab}
                 roadDetailsVisible={roadDetailsVisible}
                 editPinMode={editPinMode}
                 shopUv={shopUv}
+                monitorPreview={monitorPreview}
                 overlayDomRef={overlayDomRef}
                 toggleMapTiltRef={toggleMapTiltRef}
                 exitShopRef={exitShopRef}
@@ -519,54 +649,74 @@ export default function App() {
                 onShutterOpenChange={setShutterOpen}
                 onMap3DChange={setIsMap3D}
                 onInsideShopChange={handleInsideShopChange}
+                onStartEnterWebsiteFromMonitor={handleStartEnterHomeFromMonitor}
+                onEnterWebsiteFromMonitor={handleEnterHomeFromMonitor}
               />
 
-              <ShopHud
-                viewMode={viewMode}
-                panoTab={panoTab}
-                roadDetailsVisible={roadDetailsVisible}
-                editPinMode={editPinMode}
-                isDefaultPin={isDefaultPin}
-                infoOpen={infoOpen}
-                dockCollapsed={dockCollapsed}
-                shutterOpen={shutterOpen}
-                isMap3D={isMap3D}
-                insideShop={insideShop}
-                hoveredItemType={hoveredItemType}
-                selectedItemType={selectedItemType}
-                overlayDomRef={overlayDomRef}
-                onModeChange={handleModeChange}
-                onPanoTabChange={setPanoTab}
-                onToggleRoads={() => setRoadDetailsVisible((prev) => !prev)}
-                onToggleMapTilt={() => toggleMapTiltRef.current?.()}
-                onExitShop={() => exitShopRef.current?.()}
-                onCloseSelectedItem={() => setSelectedItemType(null)}
-                onToggleEditPin={() => setEditPinMode((prev) => !prev)}
-                onResetPin={handleResetPin}
-                onToggleInfo={() => setInfoOpen((prev) => !prev)}
-                onToggleDock={() => setDockCollapsed((prev) => !prev)}
-                onItemWhatsApp={handleOpenWhatsAppTopic}
-                onAddCatalogProduct={(product) => handleAddToCart(product)}
-                onExitToContact={() => handleNavigate('about', 'contact')}
-              />
+              <div
+                className={`transition-opacity duration-200 ${
+                  enteringFromMonitor || shopRevealUnderlay
+                    ? 'pointer-events-none opacity-0'
+                    : 'opacity-100'
+                }`}
+              >
+                <ShopHud
+                  viewMode={viewMode}
+                  panoTab={panoTab}
+                  roadDetailsVisible={roadDetailsVisible}
+                  editPinMode={editPinMode}
+                  isDefaultPin={isDefaultPin}
+                  infoOpen={infoOpen}
+                  dockCollapsed={dockCollapsed}
+                  shutterOpen={shutterOpen}
+                  isMap3D={isMap3D}
+                  insideShop={insideShop}
+                  hoveredItemType={hoveredItemType}
+                  selectedItemType={selectedItemType}
+                  overlayDomRef={overlayDomRef}
+                  onModeChange={handleModeChange}
+                  onPanoTabChange={setPanoTab}
+                  onToggleRoads={() => setRoadDetailsVisible((prev) => !prev)}
+                  onToggleMapTilt={() => toggleMapTiltRef.current?.()}
+                  onExitShop={() => exitShopRef.current?.()}
+                  onCloseSelectedItem={() => setSelectedItemType(null)}
+                  onToggleEditPin={() => setEditPinMode((prev) => !prev)}
+                  onResetPin={handleResetPin}
+                  onToggleInfo={() => setInfoOpen((prev) => !prev)}
+                  onToggleDock={() => setDockCollapsed((prev) => !prev)}
+                  onItemWhatsApp={handleOpenWhatsAppTopic}
+                  onAddCatalogProduct={(product) => handleAddToCart(product)}
+                  onExitToContact={() => handleNavigate('about', 'contact')}
+                />
 
-              <ShopInfoDrawer
-                open={infoOpen}
-                onClose={() => setInfoOpen(false)}
-                onOpenPano={() => handleModeChange('pano')}
-              />
+                <ShopInfoDrawer
+                  open={infoOpen}
+                  onClose={() => setInfoOpen(false)}
+                  onOpenPano={() => handleModeChange('pano')}
+                />
+              </div>
             </div>
           </Suspense>
         )}
       </main>
 
       {activePage !== 'virtual-shop' && (
-        <SiteFooter
-          socialLinks={socialLinks}
-          onNavigate={handleNavigate}
-          onBrowseCategory={handleBrowseCategory}
-          onToggleAdmin={handleToggleAdmin}
-        />
+        <div
+          className={
+            homeEnterPhase === 'pre'
+              ? 'relative z-20 opacity-0 transition-opacity duration-[460ms] ease-out'
+              : homeEnterPhase === 'animating'
+                ? 'relative z-20 opacity-100 transition-opacity duration-[460ms] ease-out'
+                : undefined
+          }
+        >
+          <SiteFooter
+            socialLinks={socialLinks}
+            onNavigate={handleNavigate}
+            onBrowseCategory={handleBrowseCategory}
+            onToggleAdmin={handleToggleAdmin}
+          />
+        </div>
       )}
 
       <MobileBottomNav

@@ -378,27 +378,35 @@ export const ShopHud: React.FC<ShopHudProps> = ({
         >
           {hoveredProduct && (
             <>
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-slate-300 uppercase">
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: hoveredProduct.accent }}
-                  />
-                  {hoveredProduct.category}
-                </span>
-                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
-                  {hoveredProduct.badge}
-                </span>
-              </div>
-              <div className="mt-1 text-xs font-bold leading-snug text-white">
-                {hoveredProduct.name}
-              </div>
-              <div className="mt-0.5 text-[11px] leading-tight text-slate-300">
-                {hoveredProduct.specs}
-              </div>
-              <div className="mt-1.5 text-[10px] font-semibold text-amber-300">
-                Click to inspect &amp; ask price
-              </div>
+              {hoveredProduct.id === 'Website Monitor' ? (
+                <div className="text-xs font-bold text-amber-300">
+                  Tap or Pinch to Open
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-slate-300 uppercase">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: hoveredProduct.accent }}
+                      />
+                      {hoveredProduct.category}
+                    </span>
+                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      {hoveredProduct.badge}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs font-bold leading-snug text-white">
+                    {hoveredProduct.name}
+                  </div>
+                  <div className="mt-0.5 text-[11px] leading-tight text-slate-300">
+                    {hoveredProduct.specs}
+                  </div>
+                  <div className="mt-1.5 text-[10px] font-semibold text-amber-300">
+                    Click to inspect & ask price
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>

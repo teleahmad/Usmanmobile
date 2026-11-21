@@ -59,7 +59,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
                   </span>
                 </div>
                 <div className="font-urdu mt-0.5 truncate text-[11px] font-medium text-neutral-600 sm:text-xs">
-                  <span className="sm:hidden">ریپئرنگ سینٹر اور ایسسریز</span>
+                  <span className="sm:hidden">ریپئرنگ سینٹر</span>
                   <span className="hidden sm:inline">ماہر ریپئرنگ · معیاری ایسسریز</span>
                 </div>
               </>
@@ -71,10 +71,6 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
                 </div>
                 <div className="mt-0.5 flex items-center gap-1.5 truncate text-[10.5px] font-semibold tracking-wide text-neutral-600 sm:text-[11px]">
                   <span className="text-[#EA4E1B] sm:hidden">Repairing Centre</span>
-                  <span aria-hidden="true" className="text-neutral-400 sm:hidden">
-                    ·
-                  </span>
-                  <span className="sm:hidden">Accessories</span>
 
                   <span className="hidden sm:inline">Expert Phone Repairs</span>
                   <span aria-hidden="true" className="hidden text-[#EA4E1B] sm:inline">

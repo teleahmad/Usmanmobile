@@ -98,6 +98,7 @@ export const SITE_IMAGES = {
   interiorWide: SHOP_IMAGES.interiorWide,
   signboard: SHOP_IMAGES.signboard,
   aerialMap: SHOP_IMAGES.aerialMap,
+  monitorScreen: '',
 } as const;
 
 export const PRODUCT_CATEGORIES: ProductCategory[] = [

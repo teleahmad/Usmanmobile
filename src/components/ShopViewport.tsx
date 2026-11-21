@@ -14,7 +14,11 @@ import {
 import { buildPanoDome } from '../scene/buildPanoDome';
 import { buildTerrainAndRoads } from '../scene/buildRoads';
 import { buildShopModel, InteractiveShopItem } from '../scene/buildShop';
-import { createTwilightSkyTexture, detectSoftwareGl } from '../scene/materials';
+import {
+  createTwilightSkyTexture,
+  detectSoftwareGl,
+  MonitorPreviewOptions,
+} from '../scene/materials';
 
 export interface OverlayDomRefs {
   pinEl: HTMLButtonElement | null;
@@ -30,6 +34,7 @@ interface ShopViewportProps {
   roadDetailsVisible: boolean;
   editPinMode: boolean;
   shopUv: [number, number];
+  monitorPreview?: MonitorPreviewOptions;
   overlayDomRef: React.MutableRefObject<OverlayDomRefs>;
   toggleMapTiltRef?: React.MutableRefObject<(() => void) | null>;
   exitShopRef?: React.MutableRefObject<(() => void) | null>;
@@ -41,6 +46,8 @@ interface ShopViewportProps {
   onShutterOpenChange?: (isOpen: boolean) => void;
   onMap3DChange?: (is3D: boolean) => void;
   onInsideShopChange?: (inside: boolean) => void;
+  onStartEnterWebsiteFromMonitor?: () => void;
+  onEnterWebsiteFromMonitor?: () => void;
 }
 
 // Pre-allocated math helpers outside render loop (zero per-frame GC)
@@ -57,6 +64,13 @@ const _spherical = new THREE.Spherical();
 const _offset = new THREE.Vector3();
 const _panRight = new THREE.Vector3();
 const _panForward = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _monCenter = new THREE.Vector3();
+const _monNormal = new THREE.Vector3();
+const _camForward = new THREE.Vector3();
+const _toMonitor = new THREE.Vector3();
+const _standTarget = new THREE.Vector3();
+const _standCam = new THREE.Vector3();
 
 function projectToScreen(
   x: number,
@@ -77,6 +91,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
   roadDetailsVisible,
   editPinMode,
   shopUv,
+  monitorPreview,
   overlayDomRef,
   toggleMapTiltRef,
   exitShopRef,
@@ -88,6 +103,8 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
   onShutterOpenChange,
   onMap3DChange,
   onInsideShopChange,
+  onStartEnterWebsiteFromMonitor,
+  onEnterWebsiteFromMonitor,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [contextLost, setContextLost] = useState(false);
@@ -99,6 +116,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     roadDetailsVisible,
     editPinMode,
     shopUv,
+    monitorPreview,
     onShopUvChange,
     onModeChange,
     onHoveredItemChange,
@@ -106,6 +124,8 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     onShutterOpenChange,
     onMap3DChange,
     onInsideShopChange,
+    onStartEnterWebsiteFromMonitor,
+    onEnterWebsiteFromMonitor,
   });
   stateRef.current = {
     viewMode,
@@ -113,6 +133,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     roadDetailsVisible,
     editPinMode,
     shopUv,
+    monitorPreview,
     onShopUvChange,
     onModeChange,
     onHoveredItemChange,
@@ -120,13 +141,15 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     onShutterOpenChange,
     onMap3DChange,
     onInsideShopChange,
+    onStartEnterWebsiteFromMonitor,
+    onEnterWebsiteFromMonitor,
   };
 
   const triggerSyncRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     triggerSyncRef.current?.();
-  }, [viewMode, panoTab, roadDetailsVisible, editPinMode, shopUv]);
+  }, [viewMode, panoTab, roadDetailsVisible, editPinMode, shopUv, monitorPreview]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -234,6 +257,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         needsRender = true;
         requestRender();
       },
+      stateRef.current.monitorPreview,
     );
     const pano = buildPanoDome(scene, [initSx, initSz], maxAnisotropy, () => {
       needsRender = true;
@@ -264,6 +288,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     // Animation & mode transition state
     let currentMode: ViewMode = stateRef.current.viewMode;
     let currentShopUv: [number, number] = [...stateRef.current.shopUv];
+    let currentMonitorPreview = stateRef.current.monitorPreview;
     let shutterVal = 0;
     let panoOpacityVal = currentMode === 'pano' ? 1 : 0;
     let roadRevealVal = 0;
@@ -276,11 +301,111 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
     let isMap3D = false;
     let insideShop = false;
     let exitScrollAccum = 0;
+    let monitorApproach = 0;
+    let moreZoomAccum = 0;
+    let enteringWebsite = false;
+    let enterTimer: number | null = null;
+    let hoveringMonitor = false;
     let pointerScreenX = -999;
     let pointerScreenY = -999;
     let lastHoverCheck = 0;
     let hoveredItem: InteractiveShopItem | null = null;
     let pointerDownPos: [number, number] | null = null;
+
+    function getMonitorPose(outCenter: THREE.Vector3, outNormal: THREE.Vector3) {
+      shop.monitorScreen.updateWorldMatrix(true, false);
+      shop.monitorScreen.getWorldPosition(outCenter);
+      shop.monitorScreen.getWorldQuaternion(_quat);
+      outNormal.set(0, 0, 1).applyQuaternion(_quat).normalize();
+    }
+
+    function isAimingAtMonitor(ndcVec: THREE.Vector2): boolean {
+      _raycaster.setFromCamera(ndcVec, camera);
+      if (_raycaster.intersectObject(shop.monitorHitTarget, false).length > 0) {
+        return true;
+      }
+      getMonitorPose(_monCenter, _monNormal);
+      _v3.copy(_monCenter).project(camera);
+      if (_v3.z <= -1 || _v3.z >= 1) return false;
+      return Math.hypot(_v3.x - ndcVec.x, _v3.y - ndcVec.y) < 0.34;
+    }
+
+    function isLookingTowardMonitor(): boolean {
+      getMonitorPose(_monCenter, _monNormal);
+      camera.getWorldDirection(_camForward);
+      _toMonitor.copy(_monCenter).sub(camera.position).normalize();
+      return _camForward.dot(_toMonitor) > 0.56;
+    }
+
+    function applyMonitorApproachGoals(progress: number) {
+      const [sx, sz] = uvToWorld(currentShopUv);
+      const standX = sx - 0.92;
+      const standY = 1.56;
+      const standZ = sz + 0.55;
+      getMonitorPose(_monCenter, _monNormal);
+      _toMonitor.copy(_monCenter).sub(_standTarget.set(standX, standY, standZ)).normalize();
+      _standCam.copy(_standTarget).addScaledVector(_toMonitor, -0.08);
+
+      const portrait = camera.aspect < 1;
+      const baseFov = portrait ? 72 : 64;
+
+      if (progress > 0.001) {
+        const ease = THREE.MathUtils.smoothstep(progress, 0, 1);
+        _targetGoal.lerpVectors(_standTarget, _monCenter, ease);
+        _v3.copy(_monCenter).addScaledVector(_monNormal, portrait ? 0.78 : 0.56);
+        _camGoal.lerpVectors(_standCam, _v3, ease);
+        fovTarget = THREE.MathUtils.lerp(baseFov, portrait ? 48 : 42, ease);
+        controls.enableRotate = false;
+        controls.minDistance = 0.05;
+        controls.maxDistance = 5.0;
+      } else {
+        _targetGoal.copy(_standTarget);
+        _camGoal.copy(_standCam);
+        fovTarget = baseFov;
+        controls.minDistance = 0.05;
+        controls.maxDistance = 5.0;
+      }
+
+      transitionActive = true;
+      needsRender = true;
+      requestRender();
+    }
+
+    function triggerEnterHomeFromMonitor() {
+      if (enteringWebsite || disposed) return;
+      enteringWebsite = true;
+      monitorApproach = 1;
+      moreZoomAccum = 0;
+      twoFingerActive = false;
+      controls.enabled = false;
+      setShutterOpenedState(true);
+
+      if (hoveredItem || hoveringMonitor) {
+        hoveredItem = null;
+        hoveringMonitor = false;
+        stateRef.current.onHoveredItemChange(null);
+      }
+
+      stateRef.current.onStartEnterWebsiteFromMonitor?.();
+
+      getMonitorPose(_monCenter, _monNormal);
+      _targetGoal.copy(_monCenter);
+      _camGoal.copy(_monCenter).addScaledVector(_monNormal, 0.25);
+      fovTarget = 30;
+      transitionActive = true;
+      needsRender = true;
+      requestRender();
+
+      if (enterTimer !== null) {
+        window.clearTimeout(enterTimer);
+      }
+      enterTimer = window.setTimeout(() => {
+        enterTimer = null;
+        if (!disposed) {
+          stateRef.current.onEnterWebsiteFromMonitor?.();
+        }
+      }, 300);
+    }
 
     function setShutterOpenedState(opened: boolean) {
       if (shutterOpened === opened) return;
@@ -294,6 +419,8 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       if (insideShop === inside) return;
       insideShop = inside;
       exitScrollAccum = 0;
+      monitorApproach = 0;
+      moreZoomAccum = 0;
       stateRef.current.onInsideShopChange?.(inside);
       needsRender = true;
       requestRender();
@@ -358,6 +485,7 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       fovTarget = portrait ? 72 : 64;
       controls.enablePan = false;
       controls.enableZoom = false;
+      controls.enableRotate = true;
       controls.minDistance = 0.06;
       controls.maxDistance = 0.1;
       controls.minPolarAngle = 0.3;
@@ -377,11 +505,14 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
 
     // Smoothly steps back outside through the open doorway onto Main Bazar right in front of the shop
     function exitShopInterior() {
-      if (!insideShop) return;
+      if (!insideShop || enteringWebsite) return;
       const [sx, sz] = uvToWorld(currentShopUv);
       const portrait = camera.aspect < 1;
 
       twoFingerActive = false;
+      monitorApproach = 0;
+      moreZoomAccum = 0;
+      controls.enableRotate = true;
       controls.enabled = true;
       setInsideShopState(false);
 
@@ -404,6 +535,10 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
 
     function applyModeGoals(mode: ViewMode, animateTransition = true) {
       twoFingerActive = false;
+      monitorApproach = 0;
+      moreZoomAccum = 0;
+      enteringWebsite = false;
+      controls.enableRotate = true;
       controls.enabled = true;
       setInsideShopState(false);
       const [sx, sz] = uvToWorld(currentShopUv);
@@ -496,6 +631,10 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         sunLight.position.set(sx - 18, 30, sz + 15);
         sunLight.target.position.set(sx, 0, sz);
         applyModeGoals(currentMode, true);
+      }
+      if (next.monitorPreview && next.monitorPreview !== currentMonitorPreview) {
+        currentMonitorPreview = next.monitorPreview;
+        shop.updateMonitorPreview(next.monitorPreview);
       }
       pano.setActiveImage(next.panoTab);
       needsRender = true;
@@ -590,19 +729,37 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
       const curMidY = (t0.clientY + t1.clientY) * 0.5;
       const distRatio = curDist / Math.max(10, prevTouchDist);
 
-      // Inside shop: 2-finger pinch performs wall-proof optical FOV zoom; pinching out past wide-angle exits smoothly
+      // Inside shop: 2-finger pinch moves closer to counter monitor when facing it (or zooms FOV), then pinching out exits cleanly
       if (insideShop) {
+        if (enteringWebsite) return;
         if (Math.abs(distRatio - 1) > 0.002) {
-          const nextFov = THREE.MathUtils.clamp(fovTarget / distRatio, 30, 74);
-          if (distRatio < 0.992 && fovTarget >= 72.5) {
-            twoFingerActive = false;
-            controls.enabled = true;
-            exitShopInterior();
-            return;
+          const facingMonitor = isLookingTowardMonitor();
+          if (distRatio > 1.003 && (facingMonitor || monitorApproach > 0)) {
+            monitorApproach = THREE.MathUtils.clamp(
+              monitorApproach + (distRatio - 1) * 1.65,
+              0,
+              1,
+            );
+            applyMonitorApproachGoals(monitorApproach);
+          } else if (distRatio < 0.997 && monitorApproach > 0) {
+            monitorApproach = THREE.MathUtils.clamp(
+              monitorApproach - (1 - distRatio) * 1.75,
+              0,
+              1,
+            );
+            applyMonitorApproachGoals(monitorApproach);
+          } else {
+            const nextFov = THREE.MathUtils.clamp(fovTarget / distRatio, 30, 74);
+            if (distRatio < 0.992 && fovTarget >= 72.5 && monitorApproach <= 0.01) {
+              twoFingerActive = false;
+              controls.enabled = true;
+              exitShopInterior();
+              return;
+            }
+            fovTarget = nextFov;
+            camera.fov = nextFov;
+            camera.updateProjectionMatrix();
           }
-          fovTarget = nextFov;
-          camera.fov = nextFov;
-          camera.updateProjectionMatrix();
         }
         prevTouch0Y = t0.clientY;
         prevTouch1Y = t1.clientY;
@@ -815,6 +972,11 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
           }
         }
         if (shutterVal > 0.82) {
+          _raycaster.setFromCamera(_ndc, camera);
+          if (_raycaster.intersectObject(shop.monitorHitTarget, false).length > 0) {
+            triggerEnterHomeFromMonitor();
+            return;
+          }
           _hoverRay.setFromCamera(_ndc, camera);
           const hits = _hoverRay.intersectObjects(shop.interactiveItems, false);
           if (hits.length > 0) {
@@ -862,8 +1024,45 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
             : e.deltaY;
       const clampedDelta = THREE.MathUtils.clamp(rawDelta, -180, 180);
 
-      // 1. INSIDE THE SHOP: strictly optical zoom (zero wall clipping!), scroll out past 73° to exit back onto Main Bazar
+      // 1. INSIDE THE SHOP:
+      // - When cursor is over/near the PC monitor: zoom moves camera right up close to the screen, then more zoom enters Home Page smoothly!
+      // - Elsewhere inside shop: wall-proof optical FOV zoom, scrolling out past 73° exits back onto Main Bazar
       if (insideShop) {
+        if (enteringWebsite) return;
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointerScreenX = e.clientX - rect.left;
+        pointerScreenY = e.clientY - rect.top;
+        _ndc.set(
+          (pointerScreenX / Math.max(1, rect.width)) * 2 - 1,
+          -(pointerScreenY / Math.max(1, rect.height)) * 2 + 1,
+        );
+
+        const targetingMonitor = monitorApproach > 0 || isAimingAtMonitor(_ndc);
+
+        if (clampedDelta < 0 && targetingMonitor) {
+          exitScrollAccum = 0;
+          if (monitorApproach < 0.995) {
+            monitorApproach = Math.min(1, monitorApproach + (-clampedDelta) * 0.0042);
+            moreZoomAccum = 0;
+            applyMonitorApproachGoals(monitorApproach);
+          } else {
+            moreZoomAccum += -clampedDelta;
+            if (moreZoomAccum >= 45) {
+              triggerEnterHomeFromMonitor();
+            }
+          }
+          return;
+        }
+
+        if (clampedDelta > 0 && monitorApproach > 0) {
+          moreZoomAccum = 0;
+          monitorApproach = Math.max(0, monitorApproach - clampedDelta * 0.0046);
+          applyMonitorApproachGoals(monitorApproach);
+          return;
+        }
+
+        moreZoomAccum = 0;
         if (clampedDelta > 0 && fovTarget >= 72.5) {
           exitScrollAccum += clampedDelta;
           if (exitScrollAccum >= 95) {
@@ -1178,7 +1377,13 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
 
       // Exponential damping for scripted camera mode glides
       if (transitionActive) {
-        const lambda = insideShop ? 5.6 : 4.2;
+        const lambda = enteringWebsite
+          ? 5.6
+          : insideShop && monitorApproach > 0
+            ? 5.2
+            : insideShop
+              ? 6.4
+              : 4.2;
         camera.position.x = THREE.MathUtils.damp(camera.position.x, _camGoal.x, lambda, dt);
         camera.position.y = THREE.MathUtils.damp(camera.position.y, _camGoal.y, lambda, dt);
         camera.position.z = THREE.MathUtils.damp(camera.position.z, _camGoal.z, lambda, dt);
@@ -1193,6 +1398,11 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
           camera.position.copy(_camGoal);
           controls.target.copy(_targetGoal);
           transitionActive = false;
+          if (insideShop && !enteringWebsite && monitorApproach <= 0.001) {
+            controls.enableRotate = true;
+            controls.minDistance = 0.06;
+            controls.maxDistance = 0.1;
+          }
         } else {
           animating = true;
         }
@@ -1306,8 +1516,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
         animating = true;
       }
 
-      // Throttled hover raycast on shop products (works inside 360° shop, 3D Shop, and zoomed-in Map!)
+      // Throttled hover raycast on shop products & counter PC monitor
       const shopInspectable =
+        !enteringWebsite &&
         (insideShop ||
           currentMode === 'shop' ||
           (currentMode === 'map' && camDistToShop < 48)) &&
@@ -1319,17 +1530,25 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
           _hoverRay.setFromCamera(_ndc, camera);
           const hits = _hoverRay.intersectObjects(shop.interactiveItems, false);
           const nextHit = hits.length > 0 ? (hits[0].object as InteractiveShopItem) : null;
-          if (nextHit !== hoveredItem) {
+          _raycaster.setFromCamera(_ndc, camera);
+          const hitMonitor =
+            !nextHit && _raycaster.intersectObject(shop.monitorHitTarget, false).length > 0;
+
+          if (nextHit !== hoveredItem || hitMonitor !== hoveringMonitor) {
             hoveredItem = nextHit;
+            hoveringMonitor = hitMonitor;
             stateRef.current.onHoveredItemChange(
-              nextHit ? nextHit.userData.itemType : null,
+              nextHit
+                ? nextHit.userData.itemType
+                : null,
             );
-            renderer.domElement.style.cursor = nextHit ? 'pointer' : 'grab';
+            renderer.domElement.style.cursor = nextHit || hitMonitor ? 'pointer' : 'grab';
           }
         }
       } else {
-        if (hoveredItem) {
+        if (hoveredItem || hoveringMonitor) {
           hoveredItem = null;
+          hoveringMonitor = false;
           stateRef.current.onHoveredItemChange(null);
         }
         renderer.domElement.style.cursor =
@@ -1447,6 +1666,9 @@ export const ShopViewport: React.FC<ShopViewportProps> = ({
 
     return () => {
       disposed = true;
+      if (enterTimer !== null) {
+        window.clearTimeout(enterTimer);
+      }
       cancelAnimationFrame(frameId);
       clearTimeout(frameId);
       resizeObserver.disconnect();
